@@ -15,9 +15,9 @@ export default async function BdeDashboardPage() {
     redirect('/login')
   }
 
-  // Check if user is BDE or CEO
+  // Check if user is BDE or Founder
   const role = (session.user as any).role
-  if (role !== 'BDE' && role !== 'CEO') {
+  if (role !== 'BUSINESS_ANALYST' && role !== 'FOUNDER' && role !== 'ADMIN') {
     return (
       <div className="flex-1 p-8">
         <h2 className="text-2xl font-bold text-red-500">Unauthorized</h2>

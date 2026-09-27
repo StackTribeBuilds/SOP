@@ -9,9 +9,9 @@ export async function GET() {
     const password = await bcrypt.hash('Stacktribe2026', 10)
 
     const users = [
-      { name: 'Nimesh', email: 'nimesh@stacktribe.com', role: 'CEO' },
-      { name: 'Aditya', email: 'aditya@stacktribe.com', role: 'CTO' },
-      { name: 'Arvind', email: 'arvind@stacktribe.com', role: 'BDE' }
+      { name: 'Nimesh', email: 'nimesh@stacktribe.com', role: 'FOUNDER' },
+      { name: 'Aditya', email: 'aditya@stacktribe.com', role: 'FOUNDER' },
+      { name: 'Arvind', email: 'arvind@stacktribe.com', role: 'BUSINESS_ANALYST' }
     ]
 
     const results = []

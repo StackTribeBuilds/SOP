@@ -28,7 +28,7 @@ export default async function WithdrawalsPage() {
     .reduce((s, w) => s + w.amount, 0)
 
   const users = await prisma.user.findMany({
-    where: { role: { in: ['CEO', 'CTO'] } },
+    where: { role: { in: ['FOUNDER', 'ADMIN'] } },
     select: { id: true, name: true, role: true },
   })
 
