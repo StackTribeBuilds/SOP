@@ -287,7 +287,7 @@ export async function setSetting(key: string, value: string) {
 // ============================================
 
 export async function getDashboardData() {
-  const [bankBalance, invoices, payments, expenses, withdrawals, projects, settings] = await Promise.all([
+  const [bankBalance, invoices, payments, expenses, withdrawals, projects, settings, leads, milestones, recentLeads] = await Promise.all([
     prisma.bankBalance.findFirst({ orderBy: { date: 'desc' } }),
     prisma.invoice.findMany({
       where: { status: { not: 'CANCELLED' } },
@@ -319,6 +319,9 @@ export async function getDashboardData() {
       include: { client: true },
     }),
     prisma.setting.findMany(),
+    prisma.lead.findMany({ where: { stage: { notIn: ['WON', 'LOST'] } } }),
+    prisma.milestone.findMany({ where: { status: 'PENDING' }, include: { project: true }, orderBy: { dueDate: 'asc' }, take: 10 }),
+    prisma.lead.findMany({ orderBy: { createdAt: 'desc' }, take: 5 })
   ])
 
   const currentCash = bankBalance?.amount ?? 0
@@ -365,6 +368,9 @@ export async function getDashboardData() {
     unpaidInvoices,
     recentPayments,
     activeProjects: projects,
+    activeLeads: leads,
+    pendingMilestones: milestones,
+    recentLeads,
   }
 }
 
