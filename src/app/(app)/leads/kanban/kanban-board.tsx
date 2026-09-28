@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import { LeadStage } from '@prisma/client';
 import { updateLeadStage } from '@/lib/crm-actions';
@@ -94,7 +95,11 @@ export function KanbanBoard({ initialLeads }: { initialLeads: Lead[] }) {
                             className={`shadow-sm ${snapshot.isDragging ? 'shadow-md ring-2 ring-primary/20' : ''}`}
                           >
                             <CardHeader className="p-3 pb-2">
-                              <CardTitle className="text-base">{lead.company}</CardTitle>
+                              <CardTitle className="text-base">
+                                <Link href={`/leads/${lead.id}`} className="hover:underline text-primary">
+                                  {lead.company}
+                                </Link>
+                              </CardTitle>
                             </CardHeader>
                             <CardContent className="p-3 pt-0 text-sm space-y-2">
                               <div className="text-muted-foreground">{lead.contactName}</div>

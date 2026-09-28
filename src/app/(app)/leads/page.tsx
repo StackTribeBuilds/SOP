@@ -45,7 +45,11 @@ export default async function LeadsPage() {
           <TableBody>
             {leads?.map((lead: any) => (
               <TableRow key={lead.id}>
-                <TableCell className="font-medium">{lead.company}</TableCell>
+                <TableCell className="font-medium">
+                  <Link href={`/leads/${lead.id}`} className="hover:underline text-primary">
+                    {lead.company}
+                  </Link>
+                </TableCell>
                 <TableCell>
                   <div className="flex flex-col">
                     <span>{lead.contactName}</span>
