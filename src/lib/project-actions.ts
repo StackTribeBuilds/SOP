@@ -129,3 +129,18 @@ export async function createProject(data: { name: string; clientId: string; cont
   }
 }
 
+
+export async function updateProject(id: string, data: any) {
+  try {
+    const project = await prisma.project.update({
+      where: { id },
+      data
+    });
+    revalidatePath(`/projects/${id}`);
+    revalidatePath('/projects');
+    return { success: true, data: project };
+  } catch (error: any) {
+    console.error(error);
+    return { success: false, error: error.message };
+  }
+}
