@@ -18,6 +18,7 @@ export default function ChangesPage() {
   const [changeRequests, setChangeRequests] = useState<any[]>([]);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [formData, setFormData] = useState({
     description: '',
@@ -39,17 +40,23 @@ export default function ChangesPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    await createChangeRequest({
-      projectId,
-      crNumber: `CR-${Date.now()}`,
-      description: formData.description,
-      impactOnScope: formData.impactOnScope,
-      estimatedHours: formData.estimatedHours ? parseFloat(formData.estimatedHours) : null,
-      additionalCost: formData.additionalCost ? parseFloat(formData.additionalCost) : null,
-    });
-    setOpen(false);
-    setFormData({ description: '', impactOnScope: '', estimatedHours: '', additionalCost: '' });
-    loadCRs();
+    if (isSubmitting) return;
+    setIsSubmitting(true);
+    try {
+      await createChangeRequest({
+        projectId,
+        crNumber: `CR-${Date.now()}`,
+        description: formData.description,
+        impactOnScope: formData.impactOnScope,
+        estimatedHours: formData.estimatedHours ? parseFloat(formData.estimatedHours) : null,
+        additionalCost: formData.additionalCost ? parseFloat(formData.additionalCost) : null,
+      });
+      setOpen(false);
+      setFormData({ description: '', impactOnScope: '', estimatedHours: '', additionalCost: '' });
+      loadCRs();
+    } finally {
+      setIsSubmitting(false);
+    }
   }
 
   async function updateStatus(id: string, status: string) {
@@ -104,7 +111,9 @@ export default function ChangesPage() {
                   />
                 </div>
               </div>
-              <Button type="submit" className="w-full">Create CR</Button>
+              <Button type="submit" className="w-full" disabled={isSubmitting}>
+                {isSubmitting ? "Creating..." : "Create CR"}
+              </Button>
             </form>
           </DialogContent>
         </Dialog>
