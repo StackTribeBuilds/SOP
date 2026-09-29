@@ -11,10 +11,14 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import Link from "next/link";
 import { ArrowRight, AlertCircle, CheckCircle2 } from "lucide-react";
-import { getProjects } from "@/lib/project-actions";
+import { getProjects, getClients } from "@/lib/project-actions";
+import { ProjectForm } from "./project-form";
 
 export default async function ProjectsPage() {
-  const projects = await getProjects();
+  const [projects, clients] = await Promise.all([
+    getProjects(),
+    getClients()
+  ]);
 
   return (
     <div className="space-y-6">
@@ -25,7 +29,7 @@ export default async function ProjectsPage() {
             Manage and monitor your active projects.
           </p>
         </div>
-        <Button>New Project</Button>
+        <ProjectForm clients={clients} />
       </div>
 
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
