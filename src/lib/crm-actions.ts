@@ -256,13 +256,19 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "./auth";
 import { revalidatePath } from "next/cache";
 
-export async function addLeadActivity(leadId: string, action: string, details?: string) {
+export async function addLeadActivity(
+  leadId: string, 
+  action: string, 
+  details?: string,
+  updateNextAction?: { text: string; date: string }
+) {
   try {
     const session = await getServerSession(authOptions);
     if (!session || !session.user) {
       return { success: false, error: 'Unauthorized' };
     }
 
+    // 1. Create the activity note
     const activity = await prisma.activity.create({
       data: {
         entityType: 'Lead',
@@ -275,10 +281,35 @@ export async function addLeadActivity(leadId: string, action: string, details?: 
         user: { select: { name: true } }
       }
     });
+
+    // 2. Optionally update the lead's next action and log it
+    if (updateNextAction && updateNextAction.text) {
+      const nextDate = updateNextAction.date ? new Date(updateNextAction.date) : new Date();
+      
+      await prisma.lead.update({
+        where: { id: leadId },
+        data: {
+          nextAction: updateNextAction.text,
+          nextActionDate: nextDate
+        }
+      });
+
+      // Log the next action change as a system-like activity
+      await prisma.activity.create({
+        data: {
+          entityType: 'Lead',
+          entityId: leadId,
+          action: 'Next Action Updated',
+          details: `Set to: "${updateNextAction.text}" on ${nextDate.toLocaleDateString()}`,
+          userId: session.user.id
+        }
+      });
+    }
     
-    // Update the lead's nextAction if the action implies an update.
-    // For simplicity, we just trigger a revalidate.
     revalidatePath(`/leads/${leadId}`);
+    revalidatePath(`/leads`);
+    revalidatePath(`/dashboard`); // Since dashboard has active leads
+    
     return { success: true, data: activity };
   } catch (error: any) {
     console.error('Error adding lead activity:', error);

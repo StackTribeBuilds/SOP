@@ -5,6 +5,9 @@ import { useRouter } from "next/navigation";
 import { addLeadActivity } from "@/lib/crm-actions";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatDistanceToNow } from "date-fns";
 
@@ -12,6 +15,10 @@ export function LeadActivityFeed({ leadId, initialActivities }: { leadId: string
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [note, setNote] = useState("");
+  
+  const [updateNextAction, setUpdateNextAction] = useState(false);
+  const [nextActionText, setNextActionText] = useState("");
+  const [nextActionDate, setNextActionDate] = useState("");
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -19,10 +26,18 @@ export function LeadActivityFeed({ leadId, initialActivities }: { leadId: string
     
     setLoading(true);
     try {
-      const res = await addLeadActivity(leadId, "Added Note / Update", note);
+      const nextActionPayload = (updateNextAction && nextActionText) 
+        ? { text: nextActionText, date: nextActionDate }
+        : undefined;
+
+      const res = await addLeadActivity(leadId, "Added Note / Update", note, nextActionPayload);
+      
       if (res.success) {
         setNote("");
-        router.refresh(); // Refresh page to get new data
+        setUpdateNextAction(false);
+        setNextActionText("");
+        setNextActionDate("");
+        router.refresh();
       } else {
         alert("Failed to add note: " + res.error);
       }
@@ -39,7 +54,7 @@ export function LeadActivityFeed({ leadId, initialActivities }: { leadId: string
         <CardTitle>Activity & Updates</CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-6">
-        <form onSubmit={handleSubmit} className="space-y-3">
+        <form onSubmit={handleSubmit} className="space-y-4">
           <Textarea 
             placeholder="Log a call, meeting, or update what happened today..."
             value={note}
@@ -47,6 +62,45 @@ export function LeadActivityFeed({ leadId, initialActivities }: { leadId: string
             rows={3}
             disabled={loading}
           />
+          
+          <div className="space-y-3 p-3 bg-muted/30 rounded-lg border border-border/50">
+            <div className="flex items-center space-x-2">
+              <Checkbox 
+                id="updateNextAction" 
+                checked={updateNextAction} 
+                onCheckedChange={(c) => setUpdateNextAction(c === true)} 
+              />
+              <Label htmlFor="updateNextAction" className="cursor-pointer font-medium">
+                Update Next Action
+              </Label>
+            </div>
+            
+            {updateNextAction && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground">Action Details</Label>
+                  <Input 
+                    placeholder="e.g. Call to discuss proposal" 
+                    value={nextActionText}
+                    onChange={(e) => setNextActionText(e.target.value)}
+                    disabled={loading}
+                    required={updateNextAction}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground">Action Date</Label>
+                  <Input 
+                    type="date"
+                    value={nextActionDate}
+                    onChange={(e) => setNextActionDate(e.target.value)}
+                    disabled={loading}
+                    required={updateNextAction}
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+
           <div className="flex justify-end">
             <Button type="submit" disabled={loading || !note.trim()}>
               {loading ? "Saving..." : "Add Update"}
@@ -54,7 +108,7 @@ export function LeadActivityFeed({ leadId, initialActivities }: { leadId: string
           </div>
         </form>
 
-        <div className="space-y-4">
+        <div className="space-y-4 mt-2">
           {initialActivities.length === 0 ? (
             <p className="text-sm text-muted-foreground text-center py-4">No activity logged yet.</p>
           ) : (
@@ -63,7 +117,7 @@ export function LeadActivityFeed({ leadId, initialActivities }: { leadId: string
                 <div className="absolute w-2 h-2 bg-primary rounded-full -left-[5px] top-2" />
                 <div className="flex justify-between items-start mb-1">
                   <div>
-                    <span className="font-semibold text-sm">{act.user?.name || "User"}</span>
+                    <span className="font-semibold text-sm">{act.user?.name || "System"}</span>
                     <span className="text-muted-foreground text-xs ml-2">{act.action}</span>
                   </div>
                   <span className="text-xs text-muted-foreground" title={new Date(act.createdAt).toLocaleString()}>
