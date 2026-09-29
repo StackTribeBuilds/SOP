@@ -251,3 +251,37 @@ export async function getBdeMetrics(userId: string) {
     return { success: false, error: error.message };
   }
 }
+
+import { getServerSession } from "next-auth/next";
+import { authOptions } from "./auth";
+import { revalidatePath } from "next/cache";
+
+export async function addLeadActivity(leadId: string, action: string, details?: string) {
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session || !session.user) {
+      return { success: false, error: 'Unauthorized' };
+    }
+
+    const activity = await prisma.activity.create({
+      data: {
+        entityType: 'Lead',
+        entityId: leadId,
+        action,
+        details,
+        userId: session.user.id
+      },
+      include: {
+        user: { select: { name: true } }
+      }
+    });
+    
+    // Update the lead's nextAction if the action implies an update.
+    // For simplicity, we just trigger a revalidate.
+    revalidatePath(`/leads/${leadId}`);
+    return { success: true, data: activity };
+  } catch (error: any) {
+    console.error('Error adding lead activity:', error);
+    return { success: false, error: error.message };
+  }
+}

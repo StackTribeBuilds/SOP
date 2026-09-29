@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { format } from 'date-fns';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
+import { LeadActivityFeed } from './lead-activity-feed';
 
 export default async function LeadDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = await params;
@@ -20,6 +21,12 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
   if (!lead) {
     notFound();
   }
+
+  const activities = await prisma.activity.findMany({
+    where: { entityType: 'Lead', entityId: leadId },
+    include: { user: { select: { name: true } } },
+    orderBy: { createdAt: 'desc' }
+  });
 
   return (
     <div className="flex-1 space-y-6 p-4 md:p-8 pt-6">
@@ -42,76 +49,73 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
       </div>
 
       <div className="grid gap-6 md:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>Contact Information</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-3 gap-4">
-              <div className="font-semibold">Contact Name</div>
-              <div className="col-span-2">{lead.contactName}</div>
-              
-              <div className="font-semibold">Email</div>
-              <div className="col-span-2">{lead.email || '-'}</div>
-              
-              <div className="font-semibold">Phone</div>
-              <div className="col-span-2">{lead.phone || '-'}</div>
-              
-              <div className="font-semibold">Decision Maker</div>
-              <div className="col-span-2">{lead.decisionMaker || '-'}</div>
+        <div className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Contact Information</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-3 gap-4 text-sm">
+                <div className="font-semibold text-muted-foreground">Contact Name</div>
+                <div className="col-span-2">{lead.contactName}</div>
+                
+                <div className="font-semibold text-muted-foreground">Email</div>
+                <div className="col-span-2">{lead.email || '-'}</div>
+                
+                <div className="font-semibold text-muted-foreground">Phone</div>
+                <div className="col-span-2">{lead.phone || '-'}</div>
+                
+                <div className="font-semibold text-muted-foreground">Decision Maker</div>
+                <div className="col-span-2">{lead.decisionMaker || '-'}</div>
 
-              <div className="font-semibold">Source</div>
-              <div className="col-span-2">{lead.source.replace('_', ' ')}</div>
+                <div className="font-semibold text-muted-foreground">Source</div>
+                <div className="col-span-2">{lead.source.replace('_', ' ')}</div>
 
-              <div className="font-semibold">Owner</div>
-              <div className="col-span-2">{lead.owner?.name || 'Unassigned'}</div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Deal Details</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-3 gap-4">
-              <div className="font-semibold">Budget</div>
-              <div className="col-span-2 text-lg font-bold">
-                {lead.estimatedBudget ? `₹${lead.estimatedBudget.toLocaleString()}` : 'TBD'}
+                <div className="font-semibold text-muted-foreground">Owner</div>
+                <div className="col-span-2">{lead.owner?.name || 'Unassigned'}</div>
               </div>
-              
-              <div className="font-semibold">Timeline</div>
-              <div className="col-span-2">{lead.timeline || '-'}</div>
-              
-              <div className="font-semibold">Next Action</div>
-              <div className="col-span-2">{lead.nextAction}</div>
-              
-              <div className="font-semibold">Next Date</div>
-              <div className="col-span-2">
-                {lead.nextActionDate ? format(new Date(lead.nextActionDate), 'PPP') : '-'}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Deal Details</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-3 gap-4 text-sm">
+                <div className="font-semibold text-muted-foreground">Budget</div>
+                <div className="col-span-2 text-lg font-bold text-foreground">
+                  {lead.estimatedBudget ? `₹${lead.estimatedBudget.toLocaleString()}` : 'TBD'}
+                </div>
+                
+                <div className="font-semibold text-muted-foreground">Timeline</div>
+                <div className="col-span-2">{lead.timeline || '-'}</div>
+                
+                <div className="font-semibold text-muted-foreground">Next Action</div>
+                <div className="col-span-2">{lead.nextAction}</div>
+                
+                <div className="font-semibold text-muted-foreground">Next Date</div>
+                <div className="col-span-2">
+                  {lead.nextActionDate ? format(new Date(lead.nextActionDate), 'PPP') : '-'}
+                </div>
               </div>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Requirement</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="whitespace-pre-wrap text-sm">{lead.requirement || 'No requirements specified.'}</p>
+            </CardContent>
+          </Card>
+        </div>
+
+        <div className="space-y-6">
+          <LeadActivityFeed leadId={leadId} initialActivities={activities} />
+        </div>
       </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Requirement</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="whitespace-pre-wrap">{lead.requirement || 'No requirements specified.'}</p>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Notes</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="whitespace-pre-wrap text-muted-foreground">{lead.notes || 'No notes added yet.'}</p>
-        </CardContent>
-      </Card>
     </div>
   );
 }
