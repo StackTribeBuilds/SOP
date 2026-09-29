@@ -54,7 +54,14 @@ export default async function ProjectsPage() {
                   {project.health.replace("_", " ")}
                 </Badge>
               </div>
-              <CardTitle>{project.name}</CardTitle>
+              <div className="flex items-center gap-2">
+                <CardTitle>{project.name}</CardTitle>
+                {project.isRecurring && (
+                  <span className="inline-flex items-center rounded-md bg-green-50 px-1.5 py-0.5 text-[10px] font-medium text-green-700 ring-1 ring-inset ring-green-600/20">
+                    Recurring
+                  </span>
+                )}
+              </div>
               <CardDescription>{project.client?.company}</CardDescription>
             </CardHeader>
             <CardContent className="flex-1 pb-3">

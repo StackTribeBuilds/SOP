@@ -253,6 +253,7 @@ model Project {
   exclusions      String?
   contractValue   Float
   currency        String        @default("INR")
+  isRecurring     Boolean       @default(false)
   
   startDate       DateTime?
   expectedEndDate DateTime?

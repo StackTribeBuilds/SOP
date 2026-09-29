@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
 
 export function ProjectSettingsForm({ project }: { project: any }) {
   const router = useRouter();
@@ -17,6 +18,7 @@ export function ProjectSettingsForm({ project }: { project: any }) {
     completionPercentage: project.completionPercentage || 0,
     description: project.description || "",
     scope: project.scope || "",
+    isRecurring: project.isRecurring || false,
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -30,6 +32,7 @@ export function ProjectSettingsForm({ project }: { project: any }) {
         completionPercentage: parseInt(formData.completionPercentage.toString()),
         description: formData.description,
         scope: formData.scope,
+        isRecurring: formData.isRecurring,
       });
 
       if (res.success) {
@@ -47,7 +50,7 @@ export function ProjectSettingsForm({ project }: { project: any }) {
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
+    <form onSubmit={handleSubmit} className="space-y-6">
       <div className="space-y-2">
         <Label>Project Name</Label>
         <Input 
@@ -76,6 +79,20 @@ export function ProjectSettingsForm({ project }: { project: any }) {
             onChange={e => setFormData({...formData, completionPercentage: e.target.value})} 
             required 
           />
+        </div>
+      </div>
+
+      <div className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4">
+        <Checkbox 
+          id="isRecurring" 
+          checked={formData.isRecurring} 
+          onCheckedChange={(checked) => setFormData({...formData, isRecurring: checked === true})} 
+        />
+        <div className="space-y-1 leading-none">
+          <Label htmlFor="isRecurring">Recurring Revenue Project</Label>
+          <p className="text-sm text-muted-foreground">
+            Mark this project if it provides continuous, recurring revenue (e.g. retainers, AMC).
+          </p>
         </div>
       </div>
 
