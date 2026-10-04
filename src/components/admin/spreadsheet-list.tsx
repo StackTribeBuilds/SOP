@@ -143,25 +143,13 @@ export function SpreadsheetList({
               <TabsContent key={sheet.id} value={sheet.id} className="flex-1 p-0 m-0 relative outline-none data-[state=active]:flex flex-col">
                 {isFounder && (
                   <div className="absolute top-2 right-4 flex gap-2 z-10 bg-white/80 p-1 rounded-md backdrop-blur-sm">
-                    <a href={sheet.embedUrl} target="_blank" rel="noreferrer">
-                      <Button variant="outline" size="sm" className="h-8 shadow-sm">
-                        <ExternalLink className="w-3.5 h-3.5 mr-2" /> Open Full
-                      </Button>
-                    </a>
+                    
                     <Button variant="destructive" size="sm" onClick={() => handleDelete(sheet.id)} className="h-8 shadow-sm">
                       <Trash2 className="w-3.5 h-3.5 mr-2" /> Remove
                     </Button>
                   </div>
                 )}
-                {!isFounder && (
-                  <div className="absolute top-2 right-4 flex gap-2 z-10 bg-white/80 p-1 rounded-md backdrop-blur-sm">
-                    <a href={sheet.embedUrl} target="_blank" rel="noreferrer">
-                      <Button variant="outline" size="sm" className="h-8 shadow-sm">
-                        <ExternalLink className="w-3.5 h-3.5 mr-2" /> Open Full
-                      </Button>
-                    </a>
-                  </div>
-                )}
+                
                 <div className="flex-1 w-full bg-slate-50 relative">
                   <iframe
                     src={getMinimalSpreadsheetUrl(sheet.embedUrl)}

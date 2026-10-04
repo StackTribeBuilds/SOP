@@ -89,9 +89,7 @@ export function DocumentList({ initialData, userId, isFounder }: { initialData: 
             <DialogTitle className="flex items-center gap-2">
               <FileText className="w-5 h-5 text-primary" />
               {viewDoc?.title}
-              <a href={viewDoc?.url} target="_blank" rel="noreferrer" className="text-blue-500 hover:text-blue-700 ml-2" title="Open in new tab">
-                <ExternalLink className="w-4 h-4" />
-              </a>
+                
             </DialogTitle>
           </DialogHeader>
           <div className="flex-1 bg-white relative">

@@ -89,9 +89,7 @@ export function CaseStudyList({ initialData, userId, isFounder }: { initialData:
             <DialogTitle className="flex items-center gap-2">
               <Briefcase className="w-5 h-5 text-primary" />
               {viewStudy?.title} {viewStudy?.projectName ? `(${viewStudy.projectName})` : ''}
-              <a href={viewStudy?.driveUrl} target="_blank" rel="noreferrer" className="text-blue-500 hover:text-blue-700 ml-2" title="Open in new tab / Download">
-                <ExternalLink className="w-4 h-4" />
-              </a>
+                
             </DialogTitle>
           </DialogHeader>
           <div className="flex-1 bg-white relative">
