@@ -228,21 +228,36 @@ export async function getBdeMetrics(userId: string) {
     startOfWeek.setDate(startOfWeek.getDate() - startOfWeek.getDay());
     startOfWeek.setHours(0, 0, 0, 0);
 
-    const reports = await prisma.bdeDailyReport.findMany({
-      where: { 
-        userId,
-        date: {
-          gte: startOfWeek
-        }
-      },
-      orderBy: { date: 'desc' },
+    const now = new Date();
+
+    const [reports, activeLeads] = await Promise.all([
+      prisma.bdeDailyReport.findMany({
+        where: { userId, date: { gte: startOfWeek } },
+        orderBy: { date: 'desc' },
+      }),
+      prisma.lead.findMany({
+        where: { ownerId: userId, stage: { notIn: ['WON', 'LOST'] } }
+      })
+    ]);
+
+    // Calculate action plan metrics
+    const overdueLeads = activeLeads.filter(l => l.nextActionDate && new Date(l.nextActionDate) < now);
+    const missingActionLeads = activeLeads.filter(l => !l.nextAction || !l.nextActionDate);
+    const untouchedLeads = activeLeads.filter(l => {
+      const daysSinceUpdate = (now.getTime() - new Date(l.updatedAt).getTime()) / (1000 * 3600 * 24);
+      return daysSinceUpdate > 7; // Stalled for more than 7 days
     });
 
     const metrics = {
       meetingsBooked: reports.reduce((sum: number, r: any) => sum + r.meetingsBooked, 0),
       prospectsContacted: reports.reduce((sum: number, r: any) => sum + r.contacted, 0),
       qualified: reports.reduce((sum: number, r: any) => sum + r.qualified, 0),
-      recentReports: reports
+      recentReports: reports,
+      actionPlan: {
+        overdue: overdueLeads,
+        missingAction: missingActionLeads,
+        stalled: untouchedLeads
+      }
     };
 
     return { success: true, data: metrics };

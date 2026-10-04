@@ -178,7 +178,83 @@ export default async function DashboardPage() {
           </CardContent>
         </Card>
 
-        {/* Quick Actions */}
+        
+      {/* FOUNDER INSIGHTS / ATTENTION REQUIRED */}
+      <div className="grid gap-6 md:grid-cols-3">
+        <Card className="border-red-200">
+          <CardHeader className="bg-red-50/50 pb-4">
+            <CardTitle className="text-red-700 flex items-center text-sm font-bold">
+              <AlertTriangle className="w-4 h-4 mr-2" />
+              Overdue Finances
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="pt-4">
+            {data.insights?.overdueInvoices?.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No overdue invoices.</p>
+            ) : (
+              <div className="space-y-3">
+                {data.insights?.overdueInvoices?.map((inv: any) => (
+                  <div key={inv.id} className="text-sm border-b pb-2">
+                    <div className="font-semibold">{inv.client?.company || 'Unknown Client'}</div>
+                    <div className="flex justify-between mt-1 text-red-600">
+                      <span>₹{inv.amount.toLocaleString()}</span>
+                      <span>Due: {new Date(inv.dueDate).toLocaleDateString()}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className="border-amber-200">
+          <CardHeader className="bg-amber-50/50 pb-4">
+            <CardTitle className="text-amber-700 flex items-center text-sm font-bold">
+              <Clock className="w-4 h-4 mr-2" />
+              At-Risk Projects
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="pt-4">
+            {data.insights?.delayedProjects?.length === 0 ? (
+              <p className="text-sm text-muted-foreground">All projects on track.</p>
+            ) : (
+              <div className="space-y-3">
+                {data.insights?.delayedProjects?.map((proj: any) => (
+                  <Link key={proj.id} href={`/projects/${proj.id}`} className="block text-sm p-2 hover:bg-slate-50 border rounded-md">
+                    <div className="font-semibold">{proj.name}</div>
+                    <Badge variant="destructive" className="mt-1">{proj.health.replace('_', ' ')}</Badge>
+                  </Link>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className="border-blue-200">
+          <CardHeader className="bg-blue-50/50 pb-4">
+            <CardTitle className="text-blue-700 flex items-center text-sm font-bold">
+              <Users className="w-4 h-4 mr-2" />
+              Missing Staff Reports
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="pt-4">
+            {data.insights?.missingReports?.length === 0 ? (
+              <p className="text-sm text-muted-foreground">All sales reps have reported today.</p>
+            ) : (
+              <div className="space-y-2">
+                {data.insights?.missingReports?.map((staff: any) => (
+                  <div key={staff.id} className="text-sm p-2 bg-slate-50 border rounded-md flex justify-between items-center">
+                    <span className="font-medium">{staff.name}</span>
+                    <span className="text-xs text-muted-foreground">{staff.role}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Quick Actions */}
         <DashboardQuickActions />
       </div>
 

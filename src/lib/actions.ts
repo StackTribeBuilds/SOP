@@ -324,8 +324,23 @@ export async function getDashboardData() {
     prisma.lead.findMany({ orderBy: { createdAt: 'desc' }, take: 5 })
   ])
 
+
   const currentCash = bankBalance?.amount ?? 0
   const minimumFloor = Number(settings.find(s => s.key === 'minimum_cash_floor')?.value ?? 100000)
+
+  // Insights for Founder
+  const todayStart = new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate())
+
+  const delayedProjects = projects.filter(p => p.health === 'AT_RISK' || p.health === 'DELAYED' || p.health === 'BLOCKED')
+  
+  const overdueAttentionInvoices = invoices.filter(i => i.status !== 'PAID' && i.status !== 'CANCELLED' && i.dueDate && new Date(i.dueDate) < new Date())
+
+  // Find users who haven't submitted daily reports today
+  const bdeReportsToday = await prisma.bdeDailyReport.findMany({ where: { date: { gte: todayStart } } })
+  const staff = await prisma.user.findMany({ where: { role: { in: ['BDE', 'BUSINESS_ANALYST'] } } })
+  
+  const missingReports = staff.filter(s => !bdeReportsToday.find(r => r.userId === s.id))
+
 
   // Calculate receivables
   const now = new Date()
@@ -357,6 +372,7 @@ export async function getDashboardData() {
   }))
 
   return {
+    insights: { delayedProjects, overdueInvoices: overdueAttentionInvoices, missingReports },
     currentCash,
     minimumFloor,
     totalReceivable,
