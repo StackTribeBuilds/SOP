@@ -8,7 +8,15 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
-import { Trash2, ExternalLink, FileText } from 'lucide-react'
+import { Trash2, ExternalLink, FileText, Eye } from 'lucide-react'
+
+// Convert google drive links to preview mode to allow iframe embedding
+function getEmbedUrl(url: string) {
+  if (url.includes('docs.google.com') && (url.includes('/edit') || url.includes('/view'))) {
+    return url.replace(/\/(edit|view).*/, '/preview')
+  }
+  return url
+}
 
 export function DocumentList({ initialData, userId, isFounder }: { initialData: any[], userId: string, isFounder: boolean }) {
   const [docs, setDocs] = useState(initialData)
@@ -17,6 +25,8 @@ export function DocumentList({ initialData, userId, isFounder }: { initialData: 
   const [title, setTitle] = useState('')
   const [url, setUrl] = useState('')
   const [isSop, setIsSop] = useState(false)
+  
+  const [viewDoc, setViewDoc] = useState<any>(null)
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -57,7 +67,7 @@ export function DocumentList({ initialData, userId, isFounder }: { initialData: 
                   <Input 
                     value={url} 
                     onChange={e => setUrl(e.target.value)} 
-                    placeholder="https://drive.google.com/..."
+                    placeholder="https://docs.google.com/document/d/.../edit"
                     required 
                   />
                 </div>
@@ -71,6 +81,30 @@ export function DocumentList({ initialData, userId, isFounder }: { initialData: 
           </Dialog>
         </div>
       )}
+
+      {/* Document Viewer Modal */}
+      <Dialog open={!!viewDoc} onOpenChange={(open) => !open && setViewDoc(null)}>
+        <DialogContent className="max-w-5xl w-full h-[85vh] flex flex-col p-0 overflow-hidden">
+          <DialogHeader className="px-4 py-3 border-b bg-muted/30">
+            <DialogTitle className="flex items-center gap-2">
+              <FileText className="w-5 h-5 text-primary" />
+              {viewDoc?.title}
+              <a href={viewDoc?.url} target="_blank" rel="noreferrer" className="text-blue-500 hover:text-blue-700 ml-2" title="Open in new tab">
+                <ExternalLink className="w-4 h-4" />
+              </a>
+            </DialogTitle>
+          </DialogHeader>
+          <div className="flex-1 bg-white relative">
+            {viewDoc && (
+              <iframe
+                src={getEmbedUrl(viewDoc.url)}
+                className="w-full h-full border-0 absolute inset-0"
+                allowFullScreen
+              />
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         {docs.map(doc => (
@@ -93,14 +127,14 @@ export function DocumentList({ initialData, userId, isFounder }: { initialData: 
                     SOP
                   </span>
                 )}
-                <a 
-                  href={doc.url} 
-                  target="_blank" 
-                  rel="noreferrer" 
-                  className="inline-flex items-center text-sm text-primary hover:underline gap-1"
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="w-full mt-2 gap-2"
+                  onClick={() => setViewDoc(doc)}
                 >
-                  View Document <ExternalLink className="w-3 h-3" />
-                </a>
+                  <Eye className="w-4 h-4" /> View Document
+                </Button>
               </div>
             </CardContent>
           </Card>

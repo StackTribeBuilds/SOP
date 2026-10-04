@@ -11,6 +11,9 @@ import { Button } from '@/components/ui/button'
 
 const founderNav = [
   { name: 'Dashboard', href: '/dashboard', icon: 'las la-tachometer-alt' },
+  { name: 'BDE Dashboard', href: '/bde', icon: 'las la-bullseye' },
+  { name: 'Leads', href: '/leads', icon: 'las la-bullhorn' },
+  { name: 'Sales Pipeline', href: '/sales', icon: 'las la-chart-line' },
   { name: 'Projects', href: '/projects', icon: 'las la-folder-open' },
   { name: 'Receivables', href: '/finance/receivables', icon: 'las la-receipt' },
   { name: 'Cash Flow Forecast', href: '/finance/forecast', icon: 'las la-chart-bar' },

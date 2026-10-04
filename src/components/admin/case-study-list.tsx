@@ -7,7 +7,17 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
-import { Trash2, ExternalLink, Briefcase } from 'lucide-react'
+import { Trash2, ExternalLink, Briefcase, Eye } from 'lucide-react'
+
+function getEmbedUrl(url: string) {
+  if (url.includes('drive.google.com') && url.includes('/view')) {
+    return url.replace(/\/view.*/, '/preview')
+  }
+  if (url.includes('docs.google.com') && (url.includes('/edit') || url.includes('/view'))) {
+    return url.replace(/\/(edit|view).*/, '/preview')
+  }
+  return url
+}
 
 export function CaseStudyList({ initialData, userId, isFounder }: { initialData: any[], userId: string, isFounder: boolean }) {
   const [studies, setStudies] = useState(initialData)
@@ -17,6 +27,8 @@ export function CaseStudyList({ initialData, userId, isFounder }: { initialData:
   const [title, setTitle] = useState('')
   const [projectName, setProjectName] = useState('')
   const [driveUrl, setDriveUrl] = useState('')
+  
+  const [viewStudy, setViewStudy] = useState<any>(null)
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -60,7 +72,7 @@ export function CaseStudyList({ initialData, userId, isFounder }: { initialData:
                 <Input 
                   value={driveUrl} 
                   onChange={e => setDriveUrl(e.target.value)} 
-                  placeholder="https://drive.google.com/..."
+                  placeholder="https://drive.google.com/file/d/.../view"
                   required 
                 />
               </div>
@@ -69,6 +81,30 @@ export function CaseStudyList({ initialData, userId, isFounder }: { initialData:
           </DialogContent>
         </Dialog>
       </div>
+
+      {/* Case Study Viewer Modal */}
+      <Dialog open={!!viewStudy} onOpenChange={(open) => !open && setViewStudy(null)}>
+        <DialogContent className="max-w-5xl w-full h-[85vh] flex flex-col p-0 overflow-hidden">
+          <DialogHeader className="px-4 py-3 border-b bg-muted/30">
+            <DialogTitle className="flex items-center gap-2">
+              <Briefcase className="w-5 h-5 text-primary" />
+              {viewStudy?.title} {viewStudy?.projectName ? `(${viewStudy.projectName})` : ''}
+              <a href={viewStudy?.driveUrl} target="_blank" rel="noreferrer" className="text-blue-500 hover:text-blue-700 ml-2" title="Open in new tab / Download">
+                <ExternalLink className="w-4 h-4" />
+              </a>
+            </DialogTitle>
+          </DialogHeader>
+          <div className="flex-1 bg-white relative">
+            {viewStudy && (
+              <iframe
+                src={getEmbedUrl(viewStudy.driveUrl)}
+                className="w-full h-full border-0 absolute inset-0"
+                allowFullScreen
+              />
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         {studies.map(study => (
@@ -93,14 +129,13 @@ export function CaseStudyList({ initialData, userId, isFounder }: { initialData:
             </CardHeader>
             <CardContent>
               <div className="flex items-center gap-2 mt-4">
-                <a 
-                  href={study.driveUrl} 
-                  target="_blank" 
-                  rel="noreferrer" 
-                  className="inline-flex items-center text-sm font-medium bg-secondary text-secondary-foreground hover:bg-secondary/80 px-3 py-1.5 rounded-md gap-2 w-full justify-center"
+                <Button 
+                  variant="outline" 
+                  className="w-full gap-2 bg-secondary text-secondary-foreground hover:bg-secondary/80"
+                  onClick={() => setViewStudy(study)}
                 >
-                  View / Download <ExternalLink className="w-4 h-4" />
-                </a>
+                  <Eye className="w-4 h-4" /> View / Download
+                </Button>
               </div>
             </CardContent>
           </Card>
