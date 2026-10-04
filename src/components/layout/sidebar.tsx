@@ -22,6 +22,7 @@ const founderNav = [
   { name: 'Weekly Founder OS', href: '/founder/weekly', icon: 'las la-calendar-week' },
   { name: 'Monthly Founder OS', href: '/founder/monthly', icon: 'las la-calendar-alt' },
   { name: 'Reports', href: '/reports', icon: 'las la-chart-pie' },
+  { name: 'Case Studies', href: '/case-studies', icon: 'las la-briefcase' },
 ]
 
 const businessNav = [
@@ -30,6 +31,7 @@ const businessNav = [
   { name: 'Sales Pipeline', href: '/sales', icon: 'las la-chart-line' },
   { name: 'Spreadsheets', href: '/bde/spreadsheets', icon: 'las la-table' },
   { name: 'SOPs & Docs', href: '/bde/documents', icon: 'las la-file-alt' },
+  { name: 'Case Studies', href: '/case-studies', icon: 'las la-briefcase' },
 ]
 
 export function Sidebar() {

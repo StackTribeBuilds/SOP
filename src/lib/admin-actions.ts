@@ -59,3 +59,20 @@ export async function deleteSpreadsheet(id: string) {
   revalidatePath('/founder/spreadsheets')
   revalidatePath('/bde/spreadsheets')
 }
+
+// --- Case Studies ---
+export async function getCaseStudies() {
+  return prisma.caseStudy.findMany({ orderBy: { createdAt: 'desc' } })
+}
+
+export async function createCaseStudy(data: any, userId: string) {
+  await prisma.caseStudy.create({
+    data: { ...data, uploadedBy: userId }
+  })
+  revalidatePath('/case-studies')
+}
+
+export async function deleteCaseStudy(id: string) {
+  await prisma.caseStudy.delete({ where: { id } })
+  revalidatePath('/case-studies')
+}
