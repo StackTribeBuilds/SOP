@@ -1,3 +1,7 @@
+
+import { redirect } from 'next/navigation'
+import { getServerSession } from 'next-auth/next'
+import { authOptions } from '@/lib/auth'
 import { getDashboardData } from '@/lib/actions'
 import { formatCurrency, getCashZone } from '@/lib/utils'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -19,8 +23,18 @@ import {
   ArrowRight
 } from 'lucide-react'
 
+
 export default async function DashboardPage() {
+  const session = await getServerSession(authOptions)
+  if (!session || !session.user) redirect('/login')
+  
+  const role = (session.user as any).role
+  if (role === 'BDE' || role === 'BUSINESS_ANALYST') {
+    redirect('/bde')
+  }
+
   const data = await getDashboardData()
+
   const zone = getCashZone(data.currentCash, data.minimumFloor)
   
   const now = new Date()

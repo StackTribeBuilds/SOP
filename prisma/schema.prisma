@@ -607,3 +607,24 @@ model FounderMonthlyReport {
 
   @@unique([month, year, userId])
 }
+
+model Document {
+  id          String   @id @default(cuid())
+  title       String
+  description String?
+  url         String   // Cloud URL or internal path
+  isSop       Boolean  @default(false)
+  createdBy   String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Spreadsheet {
+  id          String   @id @default(cuid())
+  title       String
+  embedUrl    String   // Google Sheets embed URL
+  assignedTo  String?  // Optional user ID assignment
+  createdBy   String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
