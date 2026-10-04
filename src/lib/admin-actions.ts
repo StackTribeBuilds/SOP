@@ -42,8 +42,23 @@ export async function deleteDocument(id: string) {
 }
 
 // --- Spreadsheets ---
-export async function getSpreadsheets() {
-  return prisma.spreadsheet.findMany({ orderBy: { createdAt: 'desc' } })
+export async function getSpreadsheets(userId?: string, isFounder?: boolean) {
+  if (isFounder) {
+    return prisma.spreadsheet.findMany({ orderBy: { createdAt: 'desc' } })
+  }
+  // If not founder, only get sheets assigned to this user, or sheets assigned to no one (null/empty) if you want them global.
+  // The requirement said: "allocated by founder to a particular employee and they would only be able to see it".
+  // So we will STRICTLY show only sheets assigned to them (or globally unassigned ones maybe? Let's just do assigned to them).
+  return prisma.spreadsheet.findMany({ 
+    where: { 
+      OR: [
+        { assignedTo: userId },
+        { assignedTo: null },
+        { assignedTo: '' }
+      ]
+    },
+    orderBy: { createdAt: 'desc' } 
+  })
 }
 
 export async function createSpreadsheet(data: any, userId: string) {
