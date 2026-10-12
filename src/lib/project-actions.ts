@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { prisma } from './prisma';
 import { requireFounder } from './session';
+import { MilestoneStatus } from '@prisma/client';
 
 export async function getClients() {
   await requireFounder();
@@ -104,7 +105,114 @@ export async function getMilestones(projectId: string) {
   return await prisma.milestone.findMany({
     where: { projectId },
     orderBy: { sortOrder: 'asc' },
+    include: { invoices: { where: { status: { not: 'CANCELLED' } }, orderBy: { createdAt: 'desc' } } },
   });
+}
+
+type MilestoneInput = {
+  name: string;
+  description?: string;
+  deliverables?: string;
+  dueDate?: string;
+  paymentAmount: number;
+};
+
+type Result = { success: true } | { success: false; error: string };
+
+function validateMilestone(data: MilestoneInput): string | null {
+  if (!data.name?.trim()) return 'Give the milestone a name';
+  if (!(data.paymentAmount >= 0)) return 'Payment amount must be zero or more';
+  if (data.dueDate && isNaN(new Date(data.dueDate).getTime())) return 'Enter a valid due date';
+  return null;
+}
+
+export async function createMilestone(projectId: string, data: MilestoneInput): Promise<Result> {
+  await requireFounder();
+  const error = validateMilestone(data);
+  if (error) return { success: false, error };
+
+  const count = await prisma.milestone.count({ where: { projectId } });
+  await prisma.milestone.create({
+    data: {
+      projectId,
+      name: data.name.trim(),
+      description: data.description || null,
+      deliverables: data.deliverables || null,
+      dueDate: data.dueDate ? new Date(data.dueDate) : null,
+      paymentAmount: data.paymentAmount,
+      sortOrder: count,
+    },
+  });
+  revalidatePath(`/projects/${projectId}`, 'layout');
+  revalidatePath('/dashboard');
+  return { success: true };
+}
+
+export async function updateMilestone(id: string, data: MilestoneInput): Promise<Result> {
+  await requireFounder();
+  const error = validateMilestone(data);
+  if (error) return { success: false, error };
+
+  const milestone = await prisma.milestone.findUnique({
+    where: { id },
+    include: { invoices: { where: { status: { not: 'CANCELLED' } } } },
+  });
+  if (!milestone) return { success: false, error: 'Milestone not found' };
+  // The invoice is the client's copy of the amount; change it there (or cancel it) first
+  if (milestone.invoices.length > 0 && data.paymentAmount !== milestone.paymentAmount) {
+    return { success: false, error: 'This milestone is already invoiced. Cancel the invoice before changing the amount.' };
+  }
+
+  await prisma.milestone.update({
+    where: { id },
+    data: {
+      name: data.name.trim(),
+      description: data.description || null,
+      deliverables: data.deliverables || null,
+      dueDate: data.dueDate ? new Date(data.dueDate) : null,
+      paymentAmount: data.paymentAmount,
+    },
+  });
+  revalidatePath(`/projects/${milestone.projectId}`, 'layout');
+  revalidatePath('/dashboard');
+  return { success: true };
+}
+
+export async function setMilestoneStatus(id: string, status: MilestoneStatus): Promise<Result> {
+  await requireFounder();
+  const milestone = await prisma.milestone.findUnique({ where: { id } });
+  if (!milestone) return { success: false, error: 'Milestone not found' };
+
+  await prisma.milestone.update({
+    where: { id },
+    data: {
+      status,
+      completedDate: status === 'COMPLETED' || status === 'APPROVED' ? (milestone.completedDate ?? new Date()) : null,
+      clientApprovalDate: status === 'APPROVED' ? (milestone.clientApprovalDate ?? new Date()) : null,
+    },
+  });
+  revalidatePath(`/projects/${milestone.projectId}`, 'layout');
+  revalidatePath('/dashboard');
+  return { success: true };
+}
+
+export async function deleteMilestone(id: string): Promise<Result> {
+  await requireFounder();
+  const milestone = await prisma.milestone.findUnique({
+    where: { id },
+    include: { invoices: { where: { status: { not: 'CANCELLED' } } } },
+  });
+  if (!milestone) return { success: false, error: 'Milestone not found' };
+  if (milestone.invoices.length > 0) {
+    return { success: false, error: 'This milestone has an invoice. Cancel the invoice before deleting the milestone.' };
+  }
+  // Keep cancelled invoices for the record, just unlink them
+  await prisma.$transaction([
+    prisma.invoice.updateMany({ where: { milestoneId: id }, data: { milestoneId: null } }),
+    prisma.milestone.delete({ where: { id } }),
+  ]);
+  revalidatePath(`/projects/${milestone.projectId}`, 'layout');
+  return { success: true };
 }
 
 

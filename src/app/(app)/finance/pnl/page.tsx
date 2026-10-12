@@ -40,7 +40,7 @@ export default async function PnLPage({
               <span className="font-medium">{formatCurrency(pnl.revenue)}</span>
             </div>
             <div className="flex justify-between items-center">
-              <span className="text-sm font-medium text-green-600">Collections (Cash In)</span>
+              <span className="text-sm font-medium text-green-600">Collections (cash in, shown for comparison)</span>
               <span className="font-bold text-green-600">{formatCurrency(pnl.collections)}</span>
             </div>
             <Separator />
@@ -74,10 +74,10 @@ export default async function PnLPage({
                 {formatCurrency(pnl.netProfit)}
               </span>
             </div>
-            {pnl.collections > 0 && (
+            {pnl.revenue > 0 && (
               <p className="text-xs text-muted-foreground text-center">
-                Gross Margin: {((pnl.grossProfit / pnl.collections) * 100).toFixed(1)}%
-                | Net Margin: {((pnl.netProfit / pnl.collections) * 100).toFixed(1)}%
+                Gross Margin: {((pnl.grossProfit / pnl.revenue) * 100).toFixed(1)}%
+                | Net Margin: {((pnl.netProfit / pnl.revenue) * 100).toFixed(1)}%
               </p>
             )}
           </CardContent>

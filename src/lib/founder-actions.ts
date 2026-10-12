@@ -2,6 +2,7 @@
 
 import { prisma } from '@/lib/prisma';
 import { requireFounder } from '@/lib/session';
+import { OPEN_INVOICE_STATUSES, invoiceOutstanding, invoiceExpectedCash, isInvoiceOverdue } from '@/lib/utils';
 import { startOfWeek, endOfWeek, addWeeks, startOfMonth, endOfMonth, subMonths } from 'date-fns';
 
 export async function getDailyFounderMetrics() {
@@ -11,21 +12,12 @@ export async function getDailyFounderMetrics() {
     orderBy: { date: 'desc' },
   });
 
-  // Total overdue invoices count and amount
-  const overdueInvoices = await prisma.invoice.aggregate({
-    where: {
-      status: 'OVERDUE',
-    },
-    _sum: {
-      amount: true,
-      paidAmount: true,
-    },
-    _count: {
-      id: true,
-    }
+  // Overdue is worked out from due dates (no job ever sets the OVERDUE status)
+  const openInvoices = await prisma.invoice.findMany({
+    where: { status: { in: [...OPEN_INVOICE_STATUSES] }, dueDate: { lt: new Date() } },
   });
-  
-  const totalOverdueAmount = (overdueInvoices._sum.amount || 0) - (overdueInvoices._sum.paidAmount || 0);
+  const overdue = openInvoices.filter(i => isInvoiceOverdue(i));
+  const totalOverdueAmount = overdue.reduce((sum, i) => sum + invoiceOutstanding(i), 0);
 
   // Leads in active negotiation
   const negotiationLeadsCount = await prisma.lead.count({
@@ -43,7 +35,7 @@ export async function getDailyFounderMetrics() {
 
   return {
     bankBalance: latestBalance?.amount || 0,
-    overdueInvoicesCount: overdueInvoices._count.id || 0,
+    overdueInvoicesCount: overdue.length,
     totalOverdueAmount,
     negotiationLeadsCount,
     blockedProjectsCount,
@@ -67,24 +59,19 @@ export async function getWeeklyMeetingData() {
     dealsWonThisWeek,
     projectsAtRisk
   ] = await Promise.all([
-    prisma.invoice.aggregate({
-      where: { dueDate: { gte: thisWeekStart, lte: thisWeekEnd }, status: { notIn: ['PAID', 'DRAFT', 'CANCELLED'] } },
-      _sum: { expectedCash: true, amount: true, paidAmount: true }
+    prisma.invoice.findMany({
+      where: { dueDate: { gte: thisWeekStart, lte: thisWeekEnd }, status: { in: [...OPEN_INVOICE_STATUSES] } },
     }),
-    prisma.invoice.aggregate({
-      where: { dueDate: { gte: nextWeekStart, lte: nextWeekEnd }, status: { notIn: ['PAID', 'DRAFT', 'CANCELLED'] } },
-      _sum: { expectedCash: true, amount: true, paidAmount: true }
+    prisma.invoice.findMany({
+      where: { dueDate: { gte: nextWeekStart, lte: nextWeekEnd }, status: { in: [...OPEN_INVOICE_STATUSES] } },
     }),
     prisma.lead.count({ where: { createdAt: { gte: thisWeekStart, lte: thisWeekEnd } } }),
     prisma.lead.count({ where: { stage: 'WON', updatedAt: { gte: thisWeekStart, lte: thisWeekEnd } } }),
     prisma.project.count({ where: { health: 'AT_RISK' } })
   ]);
 
-  const cashThisWeek = expectedCashThisWeek._sum.expectedCash || 
-    ((expectedCashThisWeek._sum.amount || 0) - (expectedCashThisWeek._sum.paidAmount || 0));
-    
-  const cashNextWeek = expectedCashNextWeek._sum.expectedCash || 
-    ((expectedCashNextWeek._sum.amount || 0) - (expectedCashNextWeek._sum.paidAmount || 0));
+  const cashThisWeek = expectedCashThisWeek.reduce((sum, i) => sum + invoiceExpectedCash(i), 0);
+  const cashNextWeek = expectedCashNextWeek.reduce((sum, i) => sum + invoiceExpectedCash(i), 0);
 
   return {
     expectedCashThisWeek: cashThisWeek,
@@ -148,7 +135,7 @@ export async function getGlobalKPIs() {
     prisma.lead.groupBy({ by: ['stage'], where: { stage: { in: ['WON', 'LOST'] } }, _count: { id: true } }),
     prisma.lead.aggregate({ where: { stage: 'WON' }, _avg: { estimatedBudget: true } }),
     prisma.lead.aggregate({ where: { stage: { notIn: ['WON', 'LOST'] } }, _sum: { estimatedBudget: true } }),
-    prisma.invoice.aggregate({ where: { status: { notIn: ['PAID', 'DRAFT', 'CANCELLED'] } }, _sum: { amount: true, paidAmount: true } }),
+    prisma.invoice.aggregate({ where: { status: { in: [...OPEN_INVOICE_STATUSES] } }, _sum: { amount: true, paidAmount: true } }),
     prisma.project.count({ where: { health: 'AT_RISK' } }),
     prisma.bankBalance.findFirst({ orderBy: { date: 'desc' } }),
     prisma.project.count({ where: { health: 'ON_TRACK' } })

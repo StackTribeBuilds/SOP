@@ -6,7 +6,7 @@ import { ForecastChart } from './chart'
 import { AlertTriangle } from 'lucide-react'
 
 export default async function ForecastPage() {
-  const weeks = await getCashFlowForecast()
+  const { weeks, atRiskOverdue, weeklyRecurring, weeklySalaries } = await getCashFlowForecast()
   
   // Find weeks with negative closing cash
   const negativeWeeks = weeks.filter(w => w.closingCash < 0)
@@ -16,7 +16,24 @@ export default async function ForecastPage() {
       <div>
         <h1 className="text-2xl font-bold tracking-tight">13-Week Cash Flow Forecast</h1>
         <p className="text-muted-foreground">See the cash crisis before it happens</p>
+        <p className="text-xs text-muted-foreground mt-1">
+          Closing cash counts committed, probable and recently overdue invoices at their probability.
+          Pipeline is shown but never counted. Outflows: {formatCurrency(weeklyRecurring)}/week recurring expenses
+          + {formatCurrency(weeklySalaries)}/week founder salaries (last 3 months&apos; average).
+        </p>
       </div>
+
+      {atRiskOverdue > 0 && (
+        <div className="rounded-lg bg-orange-50 border border-orange-200 p-4 flex items-start gap-3">
+          <AlertTriangle className="h-5 w-5 text-orange-600 mt-0.5 shrink-0" />
+          <div>
+            <p className="font-semibold text-orange-800">{formatCurrency(atRiskOverdue)} more than 30 days overdue</p>
+            <p className="text-sm text-orange-700 mt-1">
+              Not counted in closing cash. Escalate these on the Receivables page.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Alerts */}
       {negativeWeeks.length > 0 && (
@@ -64,7 +81,8 @@ export default async function ForecastPage() {
                   <th className="text-right py-2 px-3 font-medium text-muted-foreground">Opening</th>
                   <th className="text-right py-2 px-3 font-medium text-green-600">Committed In</th>
                   <th className="text-right py-2 px-3 font-medium text-yellow-600">Probable In</th>
-                  <th className="text-right py-2 px-3 font-medium text-gray-400">Pipeline In</th>
+                  <th className="text-right py-2 px-3 font-medium text-orange-600">Overdue (chase)</th>
+                  <th className="text-right py-2 px-3 font-medium text-gray-400">Pipeline (not counted)</th>
                   <th className="text-right py-2 px-3 font-medium text-red-600">Expected Out</th>
                   <th className="text-right py-2 px-3 font-medium text-muted-foreground">Closing</th>
                 </tr>
@@ -84,6 +102,9 @@ export default async function ForecastPage() {
                     </td>
                     <td className="py-2 px-3 text-right text-yellow-600">
                       {week.probableIn > 0 ? `+${formatCurrency(week.probableIn)}` : '—'}
+                    </td>
+                    <td className="py-2 px-3 text-right text-orange-600">
+                      {week.overdueIn > 0 ? `+${formatCurrency(week.overdueIn)}` : '—'}
                     </td>
                     <td className="py-2 px-3 text-right text-gray-400">
                       {week.pipelineIn > 0 ? `+${formatCurrency(week.pipelineIn)}` : '—'}

@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { NewClientDialog } from "./new-client-dialog";
 
 export default async function ClientsPage() {
   const clients = await getClients();
@@ -12,6 +13,7 @@ export default async function ClientsPage() {
     <div className="p-6 max-w-6xl mx-auto space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-bold">Clients</h1>
+        <NewClientDialog />
       </div>
       
       <Card>

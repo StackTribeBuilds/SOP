@@ -11,9 +11,10 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { AlertTriangle, CheckCircle, Clock, Ban } from 'lucide-react'
+import { SendInvoiceDialog, CancelInvoiceButton, LogPaymentDialog } from '@/components/finance/invoice-controls'
 
 export default async function ReceivablesPage() {
-  const { receivables, agingSummary } = await getReceivablesData()
+  const { receivables, agingSummary, drafts } = await getReceivablesData()
   const totalOutstanding = receivables.reduce((s, r) => s + r.outstanding, 0)
   const totalExpected = receivables.reduce((s, r) => s + r.expectedCash, 0)
 
@@ -77,6 +78,53 @@ export default async function ReceivablesPage() {
         </Card>
       </div>
 
+      {/* Drafts: not owed until sent */}
+      {drafts.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Drafts to send</CardTitle>
+            <p className="text-sm text-muted-foreground">
+              Not counted as receivables until you mark them sent. Invoice 7 days before a milestone is due (Bible §13).
+            </p>
+          </CardHeader>
+          <CardContent>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Client</TableHead>
+                    <TableHead>Invoice</TableHead>
+                    <TableHead>Project / milestone</TableHead>
+                    <TableHead className="text-right">Amount</TableHead>
+                    <TableHead>Planned due</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {drafts.map((d) => (
+                    <TableRow key={d.id}>
+                      <TableCell className="font-medium">{d.client.company}</TableCell>
+                      <TableCell>{d.invoiceNumber}</TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {d.project?.name ?? '—'}{d.milestone ? ` · ${d.milestone.name}` : ''}
+                      </TableCell>
+                      <TableCell className="text-right font-medium">{formatCurrency(d.amount)}</TableCell>
+                      <TableCell>{new Date(d.dueDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' })}</TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-1">
+                          <SendInvoiceDialog invoice={d} />
+                          <CancelInvoiceButton invoice={d} />
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Receivables Table */}
       <Card>
         <CardHeader>
@@ -96,12 +144,13 @@ export default async function ReceivablesPage() {
                   <TableHead className="text-right">Expected Cash</TableHead>
                   <TableHead>Owner</TableHead>
                   <TableHead>Next Action</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {receivables.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
+                    <TableCell colSpan={10} className="text-center py-8 text-muted-foreground">
                       No outstanding receivables 🎉
                     </TableCell>
                   </TableRow>
@@ -134,6 +183,9 @@ export default async function ReceivablesPage() {
                       <TableCell className="text-sm">{r.owner.name}</TableCell>
                       <TableCell className="text-sm text-muted-foreground max-w-[200px] truncate">
                         {r.nextAction || '—'}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <LogPaymentDialog invoice={r} />
                       </TableCell>
                     </TableRow>
                   ))

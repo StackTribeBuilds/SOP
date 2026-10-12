@@ -49,3 +49,26 @@ export function getAgingBucket(dueDate: Date): string {
   if (days <= 60) return '31-60 days'
   return '60+ days'
 }
+
+// --- Invoice money helpers (one definition, used by every screen) ---
+
+type InvoiceMoney = { amount: number; paidAmount: number; probabilityPercent: number; dueDate: Date; status: string }
+
+// Invoices the client has actually received and still owes on
+export const OPEN_INVOICE_STATUSES = ['SENT', 'PARTIALLY_PAID', 'OVERDUE'] as const
+
+export function invoiceOutstanding(inv: Pick<InvoiceMoney, 'amount' | 'paidAmount'>): number {
+  return Math.max(0, inv.amount - inv.paidAmount)
+}
+
+// Calculated on read so partial payments are always reflected
+export function invoiceExpectedCash(inv: Pick<InvoiceMoney, 'amount' | 'paidAmount' | 'probabilityPercent'>): number {
+  return invoiceOutstanding(inv) * (inv.probabilityPercent / 100)
+}
+
+// Overdue is derived from the due date; nothing needs to flip a status flag
+export function isInvoiceOverdue(inv: Pick<InvoiceMoney, 'dueDate' | 'status' | 'amount' | 'paidAmount'>, now: Date = new Date()): boolean {
+  return (OPEN_INVOICE_STATUSES as readonly string[]).includes(inv.status)
+    && invoiceOutstanding(inv) > 0
+    && new Date(inv.dueDate) < now
+}

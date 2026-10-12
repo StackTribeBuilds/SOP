@@ -3,6 +3,8 @@
 import { prisma } from './prisma'
 import { requireFounder } from './session'
 import { revalidatePath } from 'next/cache'
+import { startOfWeek, addDays, subMonths, startOfMonth } from 'date-fns'
+import { formatCurrency, invoiceOutstanding, invoiceExpectedCash, isInvoiceOverdue, OPEN_INVOICE_STATUSES } from './utils'
 
 // ============================================
 // BANK BALANCE
@@ -31,49 +33,77 @@ export async function getLatestBankBalance() {
 
 export async function logPayment(data: {
   amount: number
-  clientId: string
+  clientId?: string
   invoiceId?: string
   date: string
   method?: string
   reference?: string
   notes?: string
-}) {
+}): Promise<{ success: true } | { success: false; error: string }> {
   await requireFounder()
-  const payment = await prisma.payment.create({
-    data: {
-      amount: data.amount,
-      clientId: data.clientId,
-      invoiceId: data.invoiceId || null,
-      date: new Date(data.date),
-      method: data.method,
-      reference: data.reference,
-      notes: data.notes,
-    },
-  })
 
-  // Update invoice if linked
-  if (data.invoiceId) {
-    const invoice = await prisma.invoice.findUnique({
-      where: { id: data.invoiceId },
-    })
-    if (invoice) {
-      const newPaidAmount = invoice.paidAmount + data.amount
-      const newStatus = newPaidAmount >= invoice.amount ? 'PAID' : 'PARTIALLY_PAID'
-      await prisma.invoice.update({
-        where: { id: data.invoiceId },
+  const amount = Math.round(data.amount * 100) / 100
+  if (!(amount > 0)) return { success: false, error: 'Enter an amount greater than zero' }
+  const date = new Date(data.date)
+  if (isNaN(date.getTime())) return { success: false, error: 'Enter a valid payment date' }
+
+  try {
+    // Payment and invoice update succeed or fail together
+    await prisma.$transaction(async (tx) => {
+      let clientId = data.clientId
+
+      if (data.invoiceId) {
+        const invoice = await tx.invoice.findUnique({ where: { id: data.invoiceId } })
+        if (!invoice) throw new PaymentError('Invoice not found')
+        if (!(OPEN_INVOICE_STATUSES as readonly string[]).includes(invoice.status)) {
+          throw new PaymentError(invoice.status === 'DRAFT'
+            ? 'Send this invoice before logging a payment against it'
+            : `This invoice is ${invoice.status.toLowerCase()} and can't take payments`)
+        }
+        const outstanding = invoiceOutstanding(invoice)
+        if (amount > outstanding + 0.5) {
+          throw new PaymentError(`Amount is more than the ${formatCurrency(outstanding)} still owed on this invoice`)
+        }
+        clientId = invoice.clientId
+
+        const newPaidAmount = Math.min(invoice.amount, invoice.paidAmount + amount)
+        const fullyPaid = newPaidAmount >= invoice.amount - 0.5
+        await tx.invoice.update({
+          where: { id: invoice.id },
+          data: {
+            paidAmount: newPaidAmount,
+            status: fullyPaid ? 'PAID' : 'PARTIALLY_PAID',
+            paidDate: fullyPaid ? date : null,
+          },
+        })
+      }
+
+      if (!clientId) throw new PaymentError('Choose a client or an invoice for this payment')
+
+      await tx.payment.create({
         data: {
-          paidAmount: newPaidAmount,
-          paidDate: newStatus === 'PAID' ? new Date(data.date) : undefined,
-          status: newStatus,
+          amount,
+          clientId,
+          invoiceId: data.invoiceId || null,
+          date,
+          method: data.method,
+          reference: data.reference,
+          notes: data.notes,
         },
       })
-    }
+    })
+  } catch (e) {
+    if (e instanceof PaymentError) return { success: false, error: e.message }
+    throw e
   }
 
   revalidatePath('/dashboard')
-  revalidatePath('/finance/receivables')
-  return payment
+  revalidatePath('/finance', 'layout')
+  revalidatePath('/projects', 'layout')
+  return { success: true }
 }
+
+class PaymentError extends Error {}
 
 // ============================================
 // EXPENSES
@@ -237,44 +267,6 @@ export async function createClient(data: {
 }
 
 // ============================================
-// PROJECTS
-// ============================================
-
-export async function createProject(data: {
-  name: string
-  description?: string
-  contractValue: number
-  clientId: string
-  projectOwnerId: string
-  techOwnerId: string
-  startDate?: string
-  expectedEndDate?: string
-  scope?: string
-  exclusions?: string
-  estimatedHours?: number
-}) {
-  await requireFounder()
-  const project = await prisma.project.create({
-    data: {
-      name: data.name,
-      description: data.description,
-      contractValue: data.contractValue,
-      clientId: data.clientId,
-      projectOwnerId: data.projectOwnerId,
-      techOwnerId: data.techOwnerId,
-      startDate: data.startDate ? new Date(data.startDate) : null,
-      expectedEndDate: data.expectedEndDate ? new Date(data.expectedEndDate) : null,
-      scope: data.scope,
-      exclusions: data.exclusions,
-      estimatedHours: data.estimatedHours,
-      status: 'IN_PROGRESS',
-    },
-  })
-  revalidatePath('/projects')
-  return project
-}
-
-// ============================================
 // SETTINGS
 // ============================================
 
@@ -346,7 +338,7 @@ export async function getDashboardData() {
 
   const delayedProjects = projects.filter(p => p.health === 'AT_RISK' || p.health === 'DELAYED' || p.health === 'BLOCKED')
   
-  const overdueAttentionInvoices = invoices.filter(i => i.status !== 'PAID' && i.status !== 'CANCELLED' && i.dueDate && new Date(i.dueDate) < new Date())
+  const overdueAttentionInvoices = invoices.filter(i => isInvoiceOverdue(i))
 
   // Find users who haven't submitted daily reports today
   const bdeReportsToday = await prisma.bdeDailyReport.findMany({ where: { date: { gte: todayStart } } })
@@ -357,18 +349,19 @@ export async function getDashboardData() {
 
   // Calculate receivables
   const now = new Date()
-  const unpaidInvoices = invoices.filter(i => i.status !== 'PAID' && i.status !== 'CANCELLED')
-  const totalReceivable = unpaidInvoices.reduce((sum, i) => sum + (i.amount - i.paidAmount), 0)
-  const overdueInvoices = unpaidInvoices.filter(i => new Date(i.dueDate) < now)
-  const totalOverdue = overdueInvoices.reduce((sum, i) => sum + (i.amount - i.paidAmount), 0)
+  // Drafts haven't been sent, so the client doesn't owe them yet
+  const unpaidInvoices = invoices.filter(i => (OPEN_INVOICE_STATUSES as readonly string[]).includes(i.status))
+  const totalReceivable = unpaidInvoices.reduce((sum, i) => sum + invoiceOutstanding(i), 0)
+  const overdueInvoices = unpaidInvoices.filter(i => isInvoiceOverdue(i, now))
+  const totalOverdue = overdueInvoices.reduce((sum, i) => sum + invoiceOutstanding(i), 0)
   
   const weekFromNow = new Date(now)
   weekFromNow.setDate(weekFromNow.getDate() + 7)
   const dueThisWeek = unpaidInvoices
     .filter(i => new Date(i.dueDate) >= now && new Date(i.dueDate) <= weekFromNow)
-    .reduce((sum, i) => sum + (i.amount - i.paidAmount), 0)
+    .reduce((sum, i) => sum + invoiceOutstanding(i), 0)
 
-  const expectedCash = unpaidInvoices.reduce((sum, i) => sum + (i.expectedCash ?? (i.amount - i.paidAmount)), 0)
+  const expectedCash = unpaidInvoices.reduce((sum, i) => sum + invoiceExpectedCash(i), 0)
 
   // Monthly expenses & withdrawals
   const monthlyExpenses = expenses.reduce((sum, e) => sum + e.amount, 0)
@@ -409,22 +402,24 @@ export async function getDashboardData() {
 
 export async function getReceivablesData() {
   await requireFounder()
-  const invoices = await prisma.invoice.findMany({
-    where: {
-      status: { notIn: ['PAID', 'CANCELLED'] },
-    },
-    include: {
-      client: true,
-      project: true,
-      owner: true,
-    },
-    orderBy: { dueDate: 'asc' },
-  })
+  const [invoices, drafts] = await Promise.all([
+    prisma.invoice.findMany({
+      where: { status: { in: [...OPEN_INVOICE_STATUSES] } },
+      include: { client: true, project: true, owner: true, milestone: true },
+      orderBy: { dueDate: 'asc' },
+    }),
+    // Drafts are listed separately: they aren't owed until they're sent
+    prisma.invoice.findMany({
+      where: { status: 'DRAFT' },
+      include: { client: true, project: true, milestone: true },
+      orderBy: { createdAt: 'desc' },
+    }),
+  ])
 
   const now = new Date()
   
   const receivables = invoices.map(invoice => {
-    const outstanding = invoice.amount - invoice.paidAmount
+    const outstanding = invoiceOutstanding(invoice)
     const daysOverdue = invoice.dueDate < now
       ? Math.floor((now.getTime() - invoice.dueDate.getTime()) / (1000 * 60 * 60 * 24))
       : 0
@@ -440,7 +435,7 @@ export async function getReceivablesData() {
       outstanding,
       daysOverdue,
       agingBucket,
-      expectedCash: outstanding * (invoice.probabilityPercent / 100),
+      expectedCash: invoiceExpectedCash(invoice),
     }
   })
 
@@ -452,7 +447,7 @@ export async function getReceivablesData() {
     '60+': receivables.filter(r => r.agingBucket === '60+ days').reduce((s, r) => s + r.outstanding, 0),
   }
 
-  return { receivables, agingSummary }
+  return { receivables, agingSummary, drafts }
 }
 
 // ============================================
@@ -475,8 +470,9 @@ export async function getPnLData(year: number, month: number) {
       where: { date: { gte: startDate, lte: endDate } },
       include: { user: true },
     }),
+    // Revenue = invoices raised this month; drafts and cancelled ones aren't revenue
     prisma.invoice.findMany({
-      where: { createdAt: { gte: startDate, lte: endDate } },
+      where: { createdAt: { gte: startDate, lte: endDate }, status: { notIn: ['DRAFT', 'CANCELLED'] } },
     }),
   ])
 
@@ -487,9 +483,11 @@ export async function getPnLData(year: number, month: number) {
   const operatingExpenses = expenses.filter(e => !e.projectId).reduce((sum, e) => sum + e.amount, 0)
   const founderComp = withdrawals.reduce((sum, w) => sum + w.amount, 0)
   
-  const grossProfit = collections - projectExpenses
-  const taxProvision = Math.max(0, grossProfit * 0.15) // 15% estimate
-  const netProfit = grossProfit - operatingExpenses - founderComp - taxProvision
+  // Bible §16.2: profit is revenue minus all costs; collections are reported alongside, never mixed in
+  const grossProfit = revenue - projectExpenses
+  const profitBeforeTax = grossProfit - operatingExpenses - founderComp
+  const taxProvision = Math.max(0, profitBeforeTax * 0.15) // 15% estimate
+  const netProfit = profitBeforeTax - taxProvision
 
   return {
     month: startDate,
@@ -512,75 +510,85 @@ export async function getPnLData(year: number, month: number) {
 
 export async function getCashFlowForecast() {
   await requireFounder()
-  const bankBalance = await prisma.bankBalance.findFirst({
-    orderBy: { date: 'desc' },
-  })
+  const now = new Date()
+  // Week 1 is the current Monday–Sunday week
+  const firstWeekStart = startOfWeek(now, { weekStartsOn: 1 })
+  const salaryWindowStart = startOfMonth(subMonths(now, 3))
+  const salaryWindowEnd = startOfMonth(now)
+
+  const [bankBalance, invoices, recurringExpenses, recentWithdrawals] = await Promise.all([
+    prisma.bankBalance.findFirst({ orderBy: { date: 'desc' } }),
+    prisma.invoice.findMany({
+      where: { status: { in: [...OPEN_INVOICE_STATUSES] } },
+      include: { client: true },
+    }),
+    prisma.expense.findMany({ where: { isRecurring: true } }),
+    prisma.founderWithdrawal.findMany({
+      where: { date: { gte: salaryWindowStart, lt: salaryWindowEnd }, type: 'SALARY' },
+    }),
+  ])
   const currentCash = bankBalance?.amount ?? 0
 
-  const invoices = await prisma.invoice.findMany({
-    where: { status: { notIn: ['PAID', 'CANCELLED'] } },
-    include: { client: true },
-  })
+  // Outflows: recurring expenses are monthly; founder salaries use the last 3 full months' average
+  const weeklyRecurring = recurringExpenses.reduce((sum, e) => sum + e.amount, 0) * 12 / 52
+  const monthlySalaries = recentWithdrawals.reduce((sum, w) => sum + w.amount, 0) / 3
+  const weeklySalaries = monthlySalaries * 12 / 52
 
-  const expenses = await prisma.expense.findMany({
-    where: { isRecurring: true },
-  })
+  // Overdue up to 30 days is chased in week 1. Older than that is too uncertain to plan
+  // around, so it's reported as at risk and kept out of closing cash.
+  const atRiskCutoff = addDays(firstWeekStart, -30)
+  let atRiskOverdue = 0
 
-  // Generate 13 weeks
-  const weeks = []
-  const today = new Date()
-  // Start from the beginning of current week (Monday)
-  const startOfWeek = new Date(today)
-  startOfWeek.setDate(today.getDate() - today.getDay() + 1)
-  startOfWeek.setHours(0, 0, 0, 0)
-
-  let openingCash = currentCash
-
-  for (let i = 0; i < 13; i++) {
-    const weekStart = new Date(startOfWeek)
-    weekStart.setDate(startOfWeek.getDate() + i * 7)
-    const weekEnd = new Date(weekStart)
-    weekEnd.setDate(weekStart.getDate() + 6)
-
-    // Expected inflows based on invoice due dates
-    let committedIn = 0
-    let probableIn = 0
-    let pipelineIn = 0
-
-    for (const inv of invoices) {
-      if (inv.dueDate >= weekStart && inv.dueDate <= weekEnd) {
-        const outstanding = inv.amount - inv.paidAmount
-        const weighted = outstanding * (inv.probabilityPercent / 100)
-        
-        if (inv.probability === 'COMMITTED') committedIn += weighted
-        else if (inv.probability === 'PROBABLE') probableIn += weighted
-        else pipelineIn += weighted
-      }
-    }
-
-    const expectedIn = committedIn + probableIn + pipelineIn
-
-    // Expected outflows (recurring expenses spread weekly)
-    const weeklyRecurring = expenses.reduce((sum, e) => sum + e.amount / 4.33, 0)
-    const expectedOut = weeklyRecurring
-
-    const closingCash = openingCash + expectedIn - expectedOut
-
-    weeks.push({
+  const weeks = Array.from({ length: 13 }, (_, i) => {
+    const weekStart = addDays(firstWeekStart, i * 7)
+    const weekEnd = addDays(weekStart, 7) // exclusive
+    return {
       weekNumber: i + 1,
       weekStart,
-      weekEnd,
-      openingCash,
-      committedIn,
-      probableIn,
-      pipelineIn,
-      expectedIn,
-      expectedOut,
-      closingCash,
-    })
+      weekEnd: addDays(weekEnd, -1),
+      openingCash: 0,
+      committedIn: 0,
+      probableIn: 0,
+      overdueIn: 0,
+      pipelineIn: 0, // shown for visibility, never counted (Bible §5.3)
+      expectedIn: 0,
+      expectedOut: weeklyRecurring + weeklySalaries,
+      closingCash: 0,
+      _end: weekEnd,
+    }
+  })
 
-    openingCash = closingCash
+  for (const inv of invoices) {
+    const weighted = invoiceExpectedCash(inv)
+    if (weighted <= 0) continue
+    const due = new Date(inv.dueDate)
+
+    if (due < firstWeekStart) {
+      if (due < atRiskCutoff) atRiskOverdue += invoiceOutstanding(inv)
+      else weeks[0].overdueIn += weighted
+      continue
+    }
+    const week = weeks.find(w => due >= w.weekStart && due < w._end)
+    if (!week) continue
+    if (inv.probability === 'COMMITTED') week.committedIn += weighted
+    else if (inv.probability === 'PROBABLE') week.probableIn += weighted
+    else week.pipelineIn += weighted
   }
 
-  return weeks
+  let openingCash = currentCash
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const result = weeks.map(({ _end, ...w }) => {
+    const expectedIn = w.committedIn + w.probableIn + w.overdueIn
+    const closingCash = openingCash + expectedIn - w.expectedOut
+    const week = { ...w, openingCash, expectedIn, closingCash }
+    openingCash = closingCash
+    return week
+  })
+
+  return {
+    weeks: result,
+    atRiskOverdue,
+    weeklyRecurring,
+    weeklySalaries,
+  }
 }

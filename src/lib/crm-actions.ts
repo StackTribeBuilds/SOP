@@ -62,10 +62,34 @@ export async function createLead(data: any) {
 export async function updateLeadStage(id: string, stage: string) {
   await requireUser();
   try {
-    const lead = await prisma.lead.update({
-      where: { id },
-      data: { stage: stage as LeadStage },
+    const lead = await prisma.$transaction(async (tx) => {
+      const current = await tx.lead.findUnique({ where: { id } });
+      if (!current) throw new Error('Lead not found');
+
+      // Gate 3: a won lead becomes a client, so projects and invoices can be raised against it
+      let clientId = current.clientId;
+      if (stage === 'WON' && !clientId) {
+        const client = await tx.client.create({
+          data: {
+            company: current.company,
+            primaryContactName: current.contactName,
+            primaryContactPhone: current.phone,
+            primaryContactEmail: current.email,
+            decisionMakerName: current.decisionMaker,
+          },
+        });
+        clientId = client.id;
+      }
+
+      return tx.lead.update({
+        where: { id },
+        data: { stage: stage as LeadStage, clientId },
+      });
     });
+
+    revalidatePath('/leads', 'layout');
+    revalidatePath('/clients');
+    revalidatePath('/dashboard');
     return { success: true, data: lead };
   } catch (error: any) {
     console.error('Error updating lead stage:', error);
