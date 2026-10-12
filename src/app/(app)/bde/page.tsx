@@ -1,155 +1,110 @@
 import { redirect } from 'next/navigation'
+import Link from 'next/link'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
-import { getBdeMetrics } from '@/lib/crm-actions'
+import { getBdeMetrics, getTodayCrmCounts } from '@/lib/crm-actions'
+import { isFounderRole } from '@/lib/session'
+import { PageHeader, Stat, StatStrip } from '@/components/layout/page-header'
+import { LEAD_STAGE_LABEL, shortDate } from '@/lib/labels'
+import { CheckCircle2 } from 'lucide-react'
 import { BdeReportForm } from './report-form'
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
-import { Calendar, Users, Target, AlertTriangle, Clock, XCircle } from 'lucide-react'
-import Link from 'next/link'
+import { LeadForm } from '../leads/lead-form'
+
+export const metadata = { title: 'Sales scorecard' }
 
 export const dynamic = 'force-dynamic'
 
-export default async function BdeDashboardPage() {
-  const session = await getServerSession(authOptions)
-  
-  if (!session || !session.user) {
-    redirect('/login')
-  }
+type LeadRow = { id: string; company: string; stage: keyof typeof LEAD_STAGE_LABEL; nextAction: string | null; nextActionDate: Date | null; updatedAt: Date }
 
-  const role = (session.user as any).role
-  if (role !== 'BDE' && role !== 'BUSINESS_ANALYST' && role !== 'FOUNDER' && role !== 'ADMIN') {
+function LeadList({ leads, empty, render }: { leads: LeadRow[]; empty: string; render: (l: LeadRow) => React.ReactNode }) {
+  if (leads.length === 0) {
     return (
-      <div className="flex-1 p-8">
-        <h2 className="text-2xl font-bold text-red-500">Unauthorized</h2>
-        <p>You do not have permission to view this page.</p>
+      <div className="flex items-center gap-2 px-5 py-6 text-sm text-muted-foreground">
+        <CheckCircle2 className="h-4 w-4 text-good" /> {empty}
       </div>
     )
   }
+  return (
+    <ul className="divide-y">
+      {leads.map(l => (
+        <li key={l.id}>
+          <Link href={`/leads/${l.id}`} className="flex items-center justify-between gap-3 px-5 py-3 hover:bg-muted/40">
+            <div className="min-w-0">
+              <p className="truncate text-sm font-medium">{l.company}</p>
+              <p className="truncate text-xs text-muted-foreground">{render(l)}</p>
+            </div>
+            <span className="shrink-0 text-xs text-muted-foreground">{LEAD_STAGE_LABEL[l.stage]}</span>
+          </Link>
+        </li>
+      ))}
+    </ul>
+  )
+}
 
-  const result = await getBdeMetrics(session.user.id)
-  
-  if (!result.success) {
-    return <div className="p-8">Error loading metrics: {result.error}</div>
+export default async function BdeDashboardPage() {
+  const session = await getServerSession(authOptions)
+  if (!session?.user) redirect('/login')
+
+  const role = session.user.role
+  const isBde = role === 'BDE' || role === 'BUSINESS_ANALYST'
+  if (!isBde && !isFounderRole(role)) {
+    return <p className="text-sm text-bad">This page is for the sales team and founders.</p>
   }
 
-  const { meetingsBooked, prospectsContacted, qualified, actionPlan } = (result.data || {}) as any
+  const [result, crmToday] = await Promise.all([getBdeMetrics(), getTodayCrmCounts()])
+  if (!result.success || !result.data) {
+    return <p className="text-sm text-bad">The scorecard couldn&apos;t be loaded: {result.error}</p>
+  }
+
+  const { meetingsBooked, prospectsContacted, qualified, reported, actionPlan } = result.data
+  const vsReported = (crm: number, self: number) => (crm === self ? 'Matches your reports' : `You reported ${self}`)
+  const now = new Date()
+  const hour = Number(now.toLocaleString('en-IN', { hour: 'numeric', hour12: false, timeZone: 'Asia/Kolkata' }))
+  const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening'
+  const needsCare = [
+    ...actionPlan.missingAction,
+    ...actionPlan.stalled.filter(s => !actionPlan.missingAction.some(m => m.id === s.id)),
+  ]
 
   return (
-    <div className="flex-1 space-y-6 p-4 md:p-8 pt-6">
-      <div className="flex items-center justify-between space-y-2">
-        <h2 className="text-3xl font-bold tracking-tight">Sales Dashboard</h2>
+    <div className="space-y-6">
+      <PageHeader
+        title={isBde ? `${greeting}, ${session.user.name?.split(' ')[0] ?? ''}` : 'BDE scorecard'}
+        description={isBde
+          ? `${actionPlan.overdue.length ? `${actionPlan.overdue.length} follow-up${actionPlan.overdue.length === 1 ? ' is' : 's are'} late. ` : ''}Target: 20–30 researched prospects every working day (§3.3).`
+          : 'Your own scorecard as a founder; each BDE sees theirs here. Numbers come from the CRM, Monday to today.'}
+        actions={<LeadForm />}
+      />
+
+      <StatStrip>
+        <Stat label="Contacted this week" value={prospectsContacted} hint={vsReported(prospectsContacted, reported.prospectsContacted)} />
+        <Stat label="Qualified this week" value={qualified} hint={vsReported(qualified, reported.qualified)} />
+        <Stat label="Meetings booked" value={meetingsBooked} hint={vsReported(meetingsBooked, reported.meetingsBooked)} />
+        <Stat label="Follow-ups late" value={actionPlan.overdue.length} tone={actionPlan.overdue.length ? 'bad' : 'good'}
+          hint={actionPlan.overdue.length ? 'Clear these first' : 'All on schedule'} />
+      </StatStrip>
+
+      <div className="grid gap-6 lg:grid-cols-2">
+        <section className="surface overflow-hidden">
+          <div className="border-b px-5 py-3.5">
+            <h2 className="text-[15px] font-semibold">Follow-ups due</h2>
+            <p className="text-xs text-muted-foreground">Next action date has passed</p>
+          </div>
+          <LeadList leads={actionPlan.overdue} empty="No late follow-ups."
+            render={l => <>{l.nextAction} · <span className="font-medium text-bad">{shortDate(l.nextActionDate)}</span></>} />
+        </section>
+
+        <section className="surface overflow-hidden">
+          <div className="border-b px-5 py-3.5">
+            <h2 className="text-[15px] font-semibold">Going cold</h2>
+            <p className="text-xs text-muted-foreground">No next action, or untouched for more than 7 days</p>
+          </div>
+          <LeadList leads={needsCare} empty="Every lead has a next step and recent activity."
+            render={l => (!l.nextAction ? 'No next action set' : `Last touched ${shortDate(l.updatedAt)}`)} />
+        </section>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-3">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Meetings Booked (This Week)</CardTitle>
-            <Calendar className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{meetingsBooked}</div>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Prospects Contacted (This Week)</CardTitle>
-            <Users className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{prospectsContacted}</div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Qualified Leads (This Week)</CardTitle>
-            <Target className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{qualified}</div>
-          </CardContent>
-        </Card>
-      </div>
-
-      <div className="grid gap-6 md:grid-cols-2">
-        <Card className="border-red-200">
-          <CardHeader className="bg-red-50/50 pb-4">
-            <CardTitle className="flex items-center text-red-700">
-              <AlertTriangle className="w-5 h-5 mr-2" />
-              Attention Required
-            </CardTitle>
-            <CardDescription>Leads missing information or updates</CardDescription>
-          </CardHeader>
-          <CardContent className="pt-4 space-y-4">
-            <div>
-              <h4 className="text-sm font-medium flex items-center text-amber-700 mb-2">
-                <XCircle className="w-4 h-4 mr-1" /> Missing Next Action
-              </h4>
-              {actionPlan?.missingAction?.length === 0 ? (
-                <p className="text-sm text-muted-foreground">All leads have next actions!</p>
-              ) : (
-                <div className="space-y-2">
-                  {actionPlan?.missingAction?.map((lead: any) => (
-                    <Link key={lead.id} href={`/leads/${lead.id}`} className="block text-sm p-2 bg-slate-50 rounded-md hover:bg-slate-100 border">
-                      <span className="font-semibold">{lead.company}</span> - Needs next step
-                    </Link>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            <div>
-              <h4 className="text-sm font-medium flex items-center text-slate-700 mb-2">
-                <Clock className="w-4 h-4 mr-1" /> Stalled Leads (No Activity &gt; 7 Days)
-              </h4>
-              {actionPlan?.stalled?.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No stalled leads!</p>
-              ) : (
-                <div className="space-y-2">
-                  {actionPlan?.stalled?.map((lead: any) => (
-                    <Link key={lead.id} href={`/leads/${lead.id}`} className="block text-sm p-2 bg-slate-50 rounded-md hover:bg-slate-100 border">
-                      <span className="font-semibold">{lead.company}</span> - Stalled
-                    </Link>
-                  ))}
-                </div>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="border-amber-200">
-          <CardHeader className="bg-amber-50/50 pb-4">
-            <CardTitle className="flex items-center text-amber-700">
-              <Clock className="w-5 h-5 mr-2" />
-              Overdue Actions
-            </CardTitle>
-            <CardDescription>Follow-ups that missed their scheduled date</CardDescription>
-          </CardHeader>
-          <CardContent className="pt-4">
-            {actionPlan?.overdue?.length === 0 ? (
-              <p className="text-sm text-muted-foreground py-4 text-center">You're all caught up!</p>
-            ) : (
-              <div className="space-y-2">
-                {actionPlan?.overdue?.map((lead: any) => (
-                  <Link key={lead.id} href={`/leads/${lead.id}`} className="flex flex-col text-sm p-3 bg-white rounded-md hover:bg-slate-50 border border-amber-100 shadow-sm">
-                    <span className="font-semibold text-slate-900">{lead.company}</span>
-                    <span className="text-amber-700 mt-1">{lead.nextAction}</span>
-                    <span className="text-xs text-muted-foreground mt-1 text-red-500 font-medium">
-                      Due: {new Date(lead.nextActionDate).toLocaleDateString()}
-                    </span>
-                  </Link>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
-      <div className="mt-8 pt-6 border-t">
-        <h3 className="text-xl font-semibold mb-4">Log Daily Activity</h3>
-        <BdeReportForm userId={session.user.id} />
-      </div>
+      <BdeReportForm crmToday={crmToday} />
     </div>
   )
 }

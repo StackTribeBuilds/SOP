@@ -1,13 +1,26 @@
 import type { Metadata } from 'next'
-import { Karla } from 'next/font/google'
+import { IBM_Plex_Sans, IBM_Plex_Sans_Condensed } from 'next/font/google'
 import './globals.css'
 import { Providers } from '@/components/layout/providers'
 
-const karla = Karla({ subsets: ['latin'], display: 'swap' })
+const plex = IBM_Plex_Sans({
+  subsets: ['latin'],
+  weight: ['400', '500', '600', '700'],
+  variable: '--font-plex',
+  display: 'swap',
+})
+
+// Figures (money, counts) use the condensed cut so long rupee amounts stay compact
+const plexCondensed = IBM_Plex_Sans_Condensed({
+  subsets: ['latin'],
+  weight: ['500', '600'],
+  variable: '--font-plex-condensed',
+  display: 'swap',
+})
 
 export const metadata: Metadata = {
-  title: 'StackTribe Management System',
-  description: 'Financial & Operations Management for StackTribe',
+  title: { default: 'StackTribe OS', template: '%s · StackTribe OS' },
+  description: 'Sales, delivery and money for StackTribe, run by the Operating System Bible',
 }
 
 export default function RootLayout({
@@ -17,7 +30,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className={karla.className}>
+      <body className={`${plex.variable} ${plexCondensed.variable}`}>
         <Providers>{children}</Providers>
       </body>
     </html>

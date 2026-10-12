@@ -1,29 +1,26 @@
 'use server';
 
 import { prisma } from '@/lib/prisma';
-import { startOfWeek, endOfWeek, addWeeks, startOfMonth, endOfMonth, subMonths } from 'date-fns';
+import { requireFounder } from '@/lib/session';
+import { OPEN_INVOICE_STATUSES, invoiceOutstanding, invoiceExpectedCash, isInvoiceOverdue, getCashZone } from '@/lib/utils';
+import { PIPELINE_STAGES, healthScore, winRate } from '@/lib/kpis';
+import { getPnLData } from '@/lib/actions';
+import { revalidatePath } from 'next/cache';
+import { startOfWeek, endOfWeek, addWeeks, startOfMonth, subMonths } from 'date-fns';
 
 export async function getDailyFounderMetrics() {
+  await requireFounder();
   // Current bank balance
   const latestBalance = await prisma.bankBalance.findFirst({
     orderBy: { date: 'desc' },
   });
 
-  // Total overdue invoices count and amount
-  const overdueInvoices = await prisma.invoice.aggregate({
-    where: {
-      status: 'OVERDUE',
-    },
-    _sum: {
-      amount: true,
-      paidAmount: true,
-    },
-    _count: {
-      id: true,
-    }
+  // Overdue is worked out from due dates (no job ever sets the OVERDUE status)
+  const openInvoices = await prisma.invoice.findMany({
+    where: { status: { in: [...OPEN_INVOICE_STATUSES] }, dueDate: { lt: new Date() } },
   });
-  
-  const totalOverdueAmount = (overdueInvoices._sum.amount || 0) - (overdueInvoices._sum.paidAmount || 0);
+  const overdue = openInvoices.filter(i => isInvoiceOverdue(i));
+  const totalOverdueAmount = overdue.reduce((sum, i) => sum + invoiceOutstanding(i), 0);
 
   // Leads in active negotiation
   const negotiationLeadsCount = await prisma.lead.count({
@@ -41,7 +38,7 @@ export async function getDailyFounderMetrics() {
 
   return {
     bankBalance: latestBalance?.amount || 0,
-    overdueInvoicesCount: overdueInvoices._count.id || 0,
+    overdueInvoicesCount: overdue.length,
     totalOverdueAmount,
     negotiationLeadsCount,
     blockedProjectsCount,
@@ -49,6 +46,7 @@ export async function getDailyFounderMetrics() {
 }
 
 export async function getWeeklyMeetingData() {
+  await requireFounder();
   const now = new Date();
   
   const thisWeekStart = startOfWeek(now, { weekStartsOn: 1 });
@@ -64,24 +62,24 @@ export async function getWeeklyMeetingData() {
     dealsWonThisWeek,
     projectsAtRisk
   ] = await Promise.all([
-    prisma.invoice.aggregate({
-      where: { dueDate: { gte: thisWeekStart, lte: thisWeekEnd }, status: { notIn: ['PAID', 'DRAFT', 'CANCELLED'] } },
-      _sum: { expectedCash: true, amount: true, paidAmount: true }
+    prisma.invoice.findMany({
+      where: { dueDate: { gte: thisWeekStart, lte: thisWeekEnd }, status: { in: [...OPEN_INVOICE_STATUSES] } },
     }),
-    prisma.invoice.aggregate({
-      where: { dueDate: { gte: nextWeekStart, lte: nextWeekEnd }, status: { notIn: ['PAID', 'DRAFT', 'CANCELLED'] } },
-      _sum: { expectedCash: true, amount: true, paidAmount: true }
+    prisma.invoice.findMany({
+      where: { dueDate: { gte: nextWeekStart, lte: nextWeekEnd }, status: { in: [...OPEN_INVOICE_STATUSES] } },
     }),
     prisma.lead.count({ where: { createdAt: { gte: thisWeekStart, lte: thisWeekEnd } } }),
-    prisma.lead.count({ where: { stage: 'WON', updatedAt: { gte: thisWeekStart, lte: thisWeekEnd } } }),
+    // Counted from the stage-change log, so editing an old won lead doesn't count it again
+    prisma.activity.findMany({
+      where: { entityType: 'Lead', action: 'Stage changed', details: { endsWith: '→ WON' }, createdAt: { gte: thisWeekStart, lte: thisWeekEnd } },
+      select: { entityId: true },
+      distinct: ['entityId'],
+    }).then(rows => rows.length),
     prisma.project.count({ where: { health: 'AT_RISK' } })
   ]);
 
-  const cashThisWeek = expectedCashThisWeek._sum.expectedCash || 
-    ((expectedCashThisWeek._sum.amount || 0) - (expectedCashThisWeek._sum.paidAmount || 0));
-    
-  const cashNextWeek = expectedCashNextWeek._sum.expectedCash || 
-    ((expectedCashNextWeek._sum.amount || 0) - (expectedCashNextWeek._sum.paidAmount || 0));
+  const cashThisWeek = expectedCashThisWeek.reduce((sum, i) => sum + invoiceExpectedCash(i), 0);
+  const cashNextWeek = expectedCashNextWeek.reduce((sum, i) => sum + invoiceExpectedCash(i), 0);
 
   return {
     expectedCashThisWeek: cashThisWeek,
@@ -93,28 +91,20 @@ export async function getWeeklyMeetingData() {
 }
 
 export async function getMonthlyReviewData(year: number, month: number) {
-  // month is 1-indexed here, convert to 0-indexed for Date
-  const date = new Date(year, month - 1, 1);
-  const start = startOfMonth(date);
-  const end = endOfMonth(date);
+  await requireFounder();
+  // month is 1-indexed here; the P&L takes 0-indexed months. Same numbers as the P&L page.
+  const pnl = await getPnLData(year, month - 1);
 
-  const [revenueAgg, collectedAgg, expensesAgg, withdrawalsAgg] = await Promise.all([
-    prisma.invoice.aggregate({ where: { dueDate: { gte: start, lte: end }, status: { notIn: ['DRAFT', 'CANCELLED'] } }, _sum: { amount: true } }),
-    prisma.payment.aggregate({ where: { date: { gte: start, lte: end } }, _sum: { amount: true } }),
-    prisma.expense.aggregate({ where: { date: { gte: start, lte: end } }, _sum: { amount: true } }),
-    prisma.founderWithdrawal.aggregate({ where: { date: { gte: start, lte: end } }, _sum: { amount: true } })
-  ]);
-  const revenue = revenueAgg._sum.amount || 0;
-  const collectedCash = collectedAgg._sum.amount || 0;
-  const expenses = expensesAgg._sum.amount || 0;
-  const founderWithdrawals = withdrawalsAgg._sum.amount || 0;
+  const revenue = pnl.revenue;
+  const collectedCash = pnl.collections;
+  const expenses = pnl.projectCosts + pnl.operatingExpenses;
+  const founderWithdrawals = pnl.founderCompensation;
+  const netMargin = pnl.netProfit;
 
-  const netMargin = collectedCash - expenses;
-
-  // Mock saving of monthly review data via Settings
+  // Snapshot for the month-end review history
   const key = `monthly_review_${year}_${month}`;
   const value = JSON.stringify({ revenue, collectedCash, expenses, founderWithdrawals, netMargin });
-  
+
   await prisma.setting.upsert({
     where: { key },
     update: { value },
@@ -131,66 +121,137 @@ export async function getMonthlyReviewData(year: number, month: number) {
 }
 
 export async function getGlobalKPIs() {
-  const [
-    closedLeads,
-    wonLeadsAgg,
-    pipelineAgg,
-    receivablesAgg,
-    atRiskProjects,
-    bankResult,
-    projectsOnTrack
-  ] = await Promise.all([
+  await requireFounder();
+  const now = new Date();
+
+  const [closedLeads, wonLeadsAgg, pipelineAgg, openInvoices, activeProjects, bankResult, floorSetting] = await Promise.all([
     prisma.lead.groupBy({ by: ['stage'], where: { stage: { in: ['WON', 'LOST'] } }, _count: { id: true } }),
     prisma.lead.aggregate({ where: { stage: 'WON' }, _avg: { estimatedBudget: true } }),
-    prisma.lead.aggregate({ where: { stage: { notIn: ['WON', 'LOST'] } }, _sum: { estimatedBudget: true } }),
-    prisma.invoice.aggregate({ where: { status: { notIn: ['PAID', 'DRAFT', 'CANCELLED'] } }, _sum: { amount: true, paidAmount: true } }),
-    prisma.project.count({ where: { health: 'AT_RISK' } }),
+    prisma.lead.aggregate({ where: { stage: { in: PIPELINE_STAGES } }, _sum: { estimatedBudget: true } }),
+    prisma.invoice.findMany({ where: { status: { in: [...OPEN_INVOICE_STATUSES] } } }),
+    prisma.project.findMany({ where: { status: 'IN_PROGRESS' }, select: { health: true } }),
     prisma.bankBalance.findFirst({ orderBy: { date: 'desc' } }),
-    prisma.project.count({ where: { health: 'ON_TRACK' } })
+    prisma.setting.findUnique({ where: { key: 'minimum_cash_floor' } }),
   ]);
-  
-  let wonCount = 0;
-  let lostCount = 0;
-  
-  closedLeads.forEach(g => {
-    if (g.stage === 'WON') wonCount = g._count.id;
-    if (g.stage === 'LOST') lostCount = g._count.id;
+
+  const wonCount = closedLeads.find(g => g.stage === 'WON')?._count.id ?? 0;
+  const lostCount = closedLeads.find(g => g.stage === 'LOST')?._count.id ?? 0;
+  const rate = winRate(wonCount, lostCount);
+
+  const totalReceivables = openInvoices.reduce((sum, i) => sum + invoiceOutstanding(i), 0);
+  const totalOverdue = openInvoices.filter(i => isInvoiceOverdue(i, now)).reduce((sum, i) => sum + invoiceOutstanding(i), 0);
+
+  const bankBalance = bankResult?.amount ?? 0;
+  const minimumFloor = Number(floorSetting?.value ?? 100000);
+  const cashZone = getCashZone(bankBalance, minimumFloor);
+
+  // Margin over the last 3 full months, using the same P&L rules as the P&L page
+  const months = [1, 2, 3].map(n => subMonths(startOfMonth(now), n));
+  const pnls = await Promise.all(months.map(m => getPnLData(m.getFullYear(), m.getMonth())));
+  const revenue3m = pnls.reduce((sum, p) => sum + p.revenue, 0);
+  const net3m = pnls.reduce((sum, p) => sum + p.netProfit, 0);
+  const netMargin = revenue3m > 0 ? (net3m / revenue3m) * 100 : null;
+
+  const troubled = activeProjects.filter(p => p.health !== 'ON_TRACK').length;
+  const health = healthScore({
+    cashZone,
+    receivables: totalReceivables,
+    overdue: totalOverdue,
+    winRatePercent: rate,
+    closedDeals: wonCount + lostCount,
+    activeProjects: activeProjects.length,
+    troubledProjects: troubled,
   });
-  
-  const totalClosed = wonCount + lostCount;
-  const winRate = totalClosed > 0 ? (wonCount / totalClosed) * 100 : 0;
-  const averageDealSize = wonLeadsAgg._avg.estimatedBudget || 0;
-  const totalPipelineValue = pipelineAgg._sum.estimatedBudget || 0;
-  const totalReceivables = (receivablesAgg._sum.amount || 0) - (receivablesAgg._sum.paidAmount || 0);
-  
-  const bankBalance = bankResult?.amount || 0;
-  
-  let healthScore = 50;
-  healthScore += Math.min(20, winRate / 2);
-  healthScore += Math.max(0, 20 - (atRiskProjects * 5));
-  if (bankBalance > 1000000) healthScore += 10;
-  else if (bankBalance > 500000) healthScore += 5;
 
   return {
-    agencyHealthScore: Math.round(healthScore),
+    agencyHealthScore: health.score,
+    healthParts: health.parts,
     financial: {
       totalReceivables,
-      margin: 40, 
-      cashFlowHealth: bankBalance > 50000 ? "Healthy" : "Needs Attention"
+      totalOverdue,
+      netMargin,
+      revenue3m,
+      bankBalance,
+      minimumFloor,
+      cashZone,
     },
     sales: {
-      winRate: Math.round(winRate),
-      averageDealSize: Math.round(averageDealSize),
-      pipelineValue: totalPipelineValue
+      winRate: Math.round(rate),
+      wonCount,
+      lostCount,
+      averageDealSize: Math.round(wonLeadsAgg._avg.estimatedBudget || 0),
+      pipelineValue: pipelineAgg._sum.estimatedBudget || 0,
     },
     delivery: {
-      projectsOnTrack,
-      projectsAtRisk: atRiskProjects
+      activeProjects: activeProjects.length,
+      projectsOnTrack: activeProjects.length - troubled,
+      projectsAtRisk: troubled,
     }
   };
 }
 
+// ============================================
+// BDE COMMISSION (§18.4): on collected cash, never on signed value
+// ============================================
+
+export async function getCommissionReport(year: number, month: number) {
+  await requireFounder();
+  const start = new Date(year, month, 1);
+  const end = new Date(year, month + 1, 1);
+
+  const [payments, rateSetting] = await Promise.all([
+    prisma.payment.findMany({
+      where: { date: { gte: start, lt: end } },
+      include: {
+        client: {
+          include: {
+            // The won lead that created this client carries the BDE who brought it in
+            leads: { where: { stage: 'WON' }, orderBy: { updatedAt: 'desc' }, take: 1, include: { owner: { select: { id: true, name: true, role: true } } } },
+          },
+        },
+      },
+      orderBy: { date: 'asc' },
+    }),
+    prisma.setting.findUnique({ where: { key: 'bde_commission_percent' } }),
+  ]);
+
+  const ratePercent = rateSetting ? Number(rateSetting.value) : null;
+  const byOwner = new Map<string, { ownerId: string; ownerName: string; role: string; collected: number; payments: { client: string; amount: number; date: Date }[] }>();
+  let unattributed = 0;
+
+  for (const p of payments) {
+    const owner = p.client.leads[0]?.owner;
+    if (!owner) {
+      unattributed += p.amount;
+      continue;
+    }
+    const row = byOwner.get(owner.id) ?? { ownerId: owner.id, ownerName: owner.name, role: owner.role, collected: 0, payments: [] };
+    row.collected += p.amount;
+    row.payments.push({ client: p.client.company, amount: p.amount, date: p.date });
+    byOwner.set(owner.id, row);
+  }
+
+  const rows = [...byOwner.values()]
+    .map(r => ({ ...r, commission: ratePercent != null ? (r.collected * ratePercent) / 100 : null }))
+    .sort((a, b) => b.collected - a.collected);
+
+  return { ratePercent, rows, unattributed, totalCollected: payments.reduce((sum, p) => sum + p.amount, 0) };
+}
+
+export async function setCommissionRate(percent: number) {
+  await requireFounder();
+  if (!(percent >= 0 && percent <= 50)) return { success: false as const, error: 'Enter a rate between 0 and 50%' };
+  await prisma.setting.upsert({
+    where: { key: 'bde_commission_percent' },
+    create: { key: 'bde_commission_percent', value: String(percent) },
+    update: { value: String(percent) },
+  });
+  revalidatePath('/reports');
+  return { success: true as const };
+}
+
 export async function saveMonthlyReview(year: number, month: number, retrospective: string) {
+  await requireFounder();
   const key = `monthly_retro_${year}_${month}`;
   await prisma.setting.upsert({
     where: { key },
@@ -200,7 +261,8 @@ export async function saveMonthlyReview(year: number, month: number, retrospecti
 }
 
 // Founder Reports actions
-export async function saveFounderDailyReport(userId: string, date: Date, data: any) {
+export async function saveFounderDailyReport(date: Date, data: any) {
+  const { id: userId } = await requireFounder();
   // Normalize date to start of day
   const normalizedDate = new Date(date);
   normalizedDate.setHours(0, 0, 0, 0);
@@ -221,7 +283,8 @@ export async function saveFounderDailyReport(userId: string, date: Date, data: a
   });
 }
 
-export async function saveFounderWeeklyReport(userId: string, weekStartDate: Date, data: any) {
+export async function saveFounderWeeklyReport(weekStartDate: Date, data: any) {
+  const { id: userId } = await requireFounder();
   const normalizedDate = new Date(weekStartDate);
   normalizedDate.setHours(0, 0, 0, 0);
 
@@ -241,7 +304,8 @@ export async function saveFounderWeeklyReport(userId: string, weekStartDate: Dat
   });
 }
 
-export async function saveFounderMonthlyReport(userId: string, year: number, month: number, data: any) {
+export async function saveFounderMonthlyReport(year: number, month: number, data: any) {
+  const { id: userId } = await requireFounder();
   return await prisma.founderMonthlyReport.upsert({
     where: {
       month_year_userId: {

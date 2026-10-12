@@ -27,7 +27,7 @@ export function MonthlyRetrospectiveForm({ userId, year, month, initialData }: {
     }
 
     try {
-      await saveFounderMonthlyReport(userId, year, month, data)
+      await saveFounderMonthlyReport(year, month, data)
       toast.success("Monthly report saved successfully")
       router.refresh()
     } catch (err) {

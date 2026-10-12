@@ -1,6 +1,8 @@
 import { getProjectTasks } from "@/lib/project-actions";
 import { TaskBoard } from "../task-board";
 
+export const metadata = { title: 'Tasks' };
+
 export default async function ProjectBoardPage({
   params,
 }: {

@@ -1,71 +1,86 @@
-import { getClients } from "@/lib/project-actions";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import Link from "next/link";
+import { getClientsOverview } from "@/lib/project-actions";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { PageHeader, Stat, StatStrip } from "@/components/layout/page-header";
+import { MoneyProgress } from "@/components/layout/money-progress";
+import { formatCurrency } from "@/lib/utils";
+import { NewClientDialog } from "./new-client-dialog";
+
+export const metadata = { title: "Clients" };
 
 export default async function ClientsPage() {
-  const clients = await getClients();
+  const clients = await getClientsOverview();
+  const pending = clients.filter(c => c.onboardingDone < c.onboardingTotal);
 
   return (
-    <div className="p-6 max-w-6xl mx-auto space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold">Clients</h1>
-      </div>
-      
-      <Card>
-        <CardHeader>
-          <CardTitle>All Clients</CardTitle>
-          <CardDescription>Manage and view your clients onboarding status.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Company</TableHead>
-                <TableHead>Primary Contact</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {clients.map((client: any) => (
-                <TableRow key={client.id}>
-                  <TableCell className="font-medium">{client.company}</TableCell>
+    <div className="space-y-6">
+      <PageHeader
+        title="Clients"
+        description="Won deals become clients. Development starts only when all 12 onboarding checks are done (§8.1)."
+        actions={<NewClientDialog />}
+      />
+
+      <StatStrip>
+        <Stat label="Clients" value={clients.length} />
+        <Stat label="Onboarding pending" value={pending.length} tone={pending.length ? "warn" : undefined} />
+        <Stat label="Collected to date" value={formatCurrency(clients.reduce((s, c) => s + c.collected, 0))} tone="good" />
+        <Stat label="Owed by clients" value={formatCurrency(clients.reduce((s, c) => s + c.owed, 0))} />
+      </StatStrip>
+
+      <div className="surface overflow-hidden">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Client</TableHead>
+              <TableHead>Onboarding</TableHead>
+              <TableHead>Money</TableHead>
+              <TableHead className="text-right">Active projects</TableHead>
+              <TableHead className="text-right"><span className="sr-only">Action</span></TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {clients.map(c => {
+              const done = c.onboardingDone === c.onboardingTotal;
+              return (
+                <TableRow key={c.id}>
                   <TableCell>
-                    {client.primaryContactName}
-                    {client.primaryContactEmail && (
-                      <span className="text-sm text-muted-foreground block">{client.primaryContactEmail}</span>
-                    )}
+                    <p className="font-medium">{c.company}</p>
+                    <p className="text-xs text-muted-foreground">{c.primaryContactName}{c.primaryContactEmail ? ` · ${c.primaryContactEmail}` : ""}</p>
+                  </TableCell>
+                  <TableCell className="min-w-[180px]">
+                    <div className="flex items-center gap-2">
+                      <div className="h-1.5 w-24 overflow-hidden rounded-full bg-muted">
+                        <div className={done ? "h-full bg-good" : "h-full bg-primary"} style={{ width: `${(c.onboardingDone / c.onboardingTotal) * 100}%` }} />
+                      </div>
+                      <span className="figure text-xs font-medium">{c.onboardingDone}/{c.onboardingTotal}</span>
+                    </div>
+                    <p className="mt-1 text-xs text-muted-foreground">{done ? "Fully onboarded" : `Next: ${c.nextOnboardingStep}`}</p>
                   </TableCell>
                   <TableCell>
-                    {client.isOnboarded ? (
-                      <Badge className="bg-green-600 hover:bg-green-700">Fully Onboarded</Badge>
-                    ) : (
-                      <Badge variant="secondary">Onboarding Pending</Badge>
-                    )}
+                    {c.contracted > 0
+                      ? <MoneyProgress total={c.contracted} collected={c.collected} owed={c.owed} />
+                      : <span className="text-xs text-muted-foreground">No project yet</span>}
                   </TableCell>
+                  <TableCell className="figure text-right font-medium">{c.activeProjects}</TableCell>
                   <TableCell className="text-right">
-                    <Button asChild variant="outline" size="sm">
-                      <Link href={`/clients/${client.id}/onboard`}>
-                        {client.isOnboarded ? 'View Onboarding' : 'Complete Onboarding'}
-                      </Link>
+                    <Button asChild size="sm" variant={done ? "ghost" : "outline"}>
+                      <Link href={`/clients/${c.id}/onboard`}>{done ? "View checklist" : "Continue onboarding"}</Link>
                     </Button>
                   </TableCell>
                 </TableRow>
-              ))}
-              {clients.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={4} className="text-center text-muted-foreground h-24">
-                    No clients found.
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+              );
+            })}
+            {clients.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={5} className="h-28 text-center text-muted-foreground">
+                  No clients yet. Moving a lead to Won creates its client automatically.
+                </TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
+      </div>
     </div>
   );
 }

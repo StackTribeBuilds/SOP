@@ -1,5 +1,7 @@
 "use client";
 
+import { toast } from 'sonner';
+
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { updateProject } from "@/lib/project-actions";
@@ -36,14 +38,14 @@ export function ProjectSettingsForm({ project }: { project: any }) {
       });
 
       if (res.success) {
-        alert("Project updated successfully!");
+        toast.success("Project details saved");
         router.refresh();
       } else {
-        alert("Error updating project: " + res.error);
+        toast.error(`Could not save: ${res.error}`);
       }
     } catch (err) {
       console.error(err);
-      alert("Unexpected error occurred.");
+      toast.error("Could not save. Try again.");
     } finally {
       setLoading(false);
     }

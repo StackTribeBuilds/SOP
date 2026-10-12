@@ -4,14 +4,16 @@ import { WeeklyForm } from "./weekly-form"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 
+export const metadata = { title: 'Weekly meeting' };
+
 export default async function WeeklyFounderPage() {
   const session = await getServerSession(authOptions)
   const data = await getWeeklyMeetingData()
 
   return (
-    <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
+    <div className="space-y-6">
       <div className="flex items-center justify-between space-y-2">
-        <h2 className="text-3xl font-bold tracking-tight">Weekly Founder OS</h2>
+        <h2 className="text-[26px] font-semibold leading-tight tracking-[-0.02em]">Weekly meeting</h2>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">

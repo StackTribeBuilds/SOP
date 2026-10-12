@@ -33,7 +33,7 @@ export function CaseStudyList({ initialData, userId, isFounder }: { initialData:
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
-    await createCaseStudy({ title, projectName, driveUrl }, userId)
+    await createCaseStudy({ title, projectName, driveUrl })
     setOpen(false)
     setTitle('')
     setProjectName('')

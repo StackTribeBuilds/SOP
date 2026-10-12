@@ -36,8 +36,12 @@ const categories = [
   'MISCELLANEOUS',
 ]
 
-export function ExpenseForm() {
-  const [open, setOpen] = useState(false)
+type DialogControl = { open?: boolean; onOpenChange?: (open: boolean) => void; hideTrigger?: boolean }
+
+export function ExpenseForm({ open: openProp, onOpenChange, hideTrigger }: DialogControl = {}) {
+  const [openState, setOpenState] = useState(false)
+  const open = openProp ?? openState
+  const setOpen = (v: boolean) => { setOpenState(v); onOpenChange?.(v) }
   const [loading, setLoading] = useState(false)
   const router = useRouter()
 
@@ -59,9 +63,11 @@ export function ExpenseForm() {
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button><Plus className="h-4 w-4 mr-2" /> Add Expense</Button>
-      </DialogTrigger>
+      {!hideTrigger && (
+        <DialogTrigger asChild>
+          <Button><Plus className="h-4 w-4" /> Add expense</Button>
+        </DialogTrigger>
+      )}
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Log Expense</DialogTitle>

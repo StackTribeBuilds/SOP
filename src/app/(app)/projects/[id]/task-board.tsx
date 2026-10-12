@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -13,21 +14,37 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useRouter } from "next/navigation";
 
+// Values must match the TaskStatus enum; labels are what people see
 const COLUMNS = [
-  "BACKLOG",
-  "THIS WEEK",
-  "IN PROGRESS",
-  "IN REVIEW",
-  "CLIENT REVIEW",
-  "APPROVED",
-  "DONE",
+  { value: "BACKLOG", label: "Backlog" },
+  { value: "THIS_WEEK", label: "This week" },
+  { value: "IN_PROGRESS", label: "In progress" },
+  { value: "IN_REVIEW", label: "In review" },
+  { value: "CLIENT_REVIEW", label: "Client review" },
+  { value: "APPROVED", label: "Approved" },
+  { value: "DONE", label: "Done" },
 ] as const;
 
-type Status = typeof COLUMNS[number];
+type Status = typeof COLUMNS[number]["value"];
+
+// Task.priority is stored as a number
+const PRIORITIES = [
+  { value: 0, label: "Low" },
+  { value: 1, label: "Medium" },
+  { value: 2, label: "High" },
+  { value: 3, label: "Urgent" },
+];
+const priorityLabel = (p: number) => PRIORITIES.find(x => x.value === p)?.label ?? "Medium";
 
 export function TaskBoard({ initialTasks, projectId }: { initialTasks: any[], projectId: string }) {
   const router = useRouter();
   const [tasks, setTasks] = useState(initialTasks);
+  // Pick up fresh tasks after router.refresh()
+  const [prevInitial, setPrevInitial] = useState(initialTasks);
+  if (initialTasks !== prevInitial) {
+    setPrevInitial(initialTasks);
+    setTasks(initialTasks);
+  }
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -35,7 +52,7 @@ export function TaskBoard({ initialTasks, projectId }: { initialTasks: any[], pr
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [status, setStatus] = useState<Status>("BACKLOG");
-  const [priority, setPriority] = useState("MEDIUM");
+  const [priority, setPriority] = useState("1");
 
   const handleCreateTask = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -46,13 +63,13 @@ export function TaskBoard({ initialTasks, projectId }: { initialTasks: any[], pr
         title,
         description,
         status,
-        priority,
+        priority: parseInt(priority, 10),
       });
       setIsDialogOpen(false);
       setTitle("");
       setDescription("");
       setStatus("BACKLOG");
-      setPriority("MEDIUM");
+      setPriority("1");
       router.refresh(); // Refresh server component
     } catch (error) {
       console.error("Failed to create task", error);
@@ -65,14 +82,13 @@ export function TaskBoard({ initialTasks, projectId }: { initialTasks: any[], pr
     // Optimistic update
     setTasks(tasks.map(t => t.id === taskId ? { ...t, status: newStatus } : t));
     
-    try {
-      await updateTaskStatus(taskId, newStatus);
-      router.refresh();
-    } catch (error) {
-      console.error("Failed to update task", error);
-      // Revert on failure (simplified)
+    const res = await updateTaskStatus(taskId, newStatus);
+    if (!res.success) {
+      toast.error(res.error);
       setTasks(initialTasks);
+      return;
     }
+    router.refresh();
   };
 
   return (
@@ -104,7 +120,7 @@ export function TaskBoard({ initialTasks, projectId }: { initialTasks: any[], pr
                     </SelectTrigger>
                     <SelectContent>
                       {COLUMNS.map(col => (
-                        <SelectItem key={col} value={col}>{col}</SelectItem>
+                        <SelectItem key={col.value} value={col.value}>{col.label}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -116,10 +132,9 @@ export function TaskBoard({ initialTasks, projectId }: { initialTasks: any[], pr
                       <SelectValue placeholder="Select priority" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="LOW">Low</SelectItem>
-                      <SelectItem value="MEDIUM">Medium</SelectItem>
-                      <SelectItem value="HIGH">High</SelectItem>
-                      <SelectItem value="URGENT">Urgent</SelectItem>
+                      {PRIORITIES.map(p => (
+                        <SelectItem key={p.value} value={String(p.value)}>{p.label}</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
@@ -134,10 +149,10 @@ export function TaskBoard({ initialTasks, projectId }: { initialTasks: any[], pr
       </div>
 
       <div className="flex overflow-x-auto pb-4 gap-4 snap-x">
-        {COLUMNS.map((col) => (
+        {COLUMNS.map(({ value: col, label }) => (
           <div key={col} className="w-80 shrink-0 bg-muted/50 rounded-lg p-4 snap-center">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="font-semibold text-sm">{col}</h3>
+              <h3 className="font-semibold text-sm">{label}</h3>
               <Badge variant="secondary" className="rounded-full">
                 {tasks.filter(t => t.status === col).length}
               </Badge>
@@ -160,7 +175,7 @@ export function TaskBoard({ initialTasks, projectId }: { initialTasks: any[], pr
                           </SelectTrigger>
                           <SelectContent align="end">
                             {COLUMNS.map(c => (
-                              <SelectItem key={c} value={c}>{c}</SelectItem>
+                              <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
@@ -172,7 +187,7 @@ export function TaskBoard({ initialTasks, projectId }: { initialTasks: any[], pr
                       </p>
                       <div className="flex justify-between items-center">
                         <Badge variant="outline" className="text-[10px] px-1 py-0 h-4">
-                          {task.priority || "MEDIUM"}
+                          {priorityLabel(task.priority)}
                         </Badge>
                         {task.assignee && (
                           <div className="w-5 h-5 rounded-full bg-primary/20 flex items-center justify-center text-[10px] font-bold text-primary">

@@ -3,6 +3,8 @@ import { notFound } from "next/navigation";
 import { ProjectSettingsForm } from "./settings-form";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
+export const metadata = { title: 'Edit project' };
+
 export default async function ProjectSettingsPage({
   params,
 }: {

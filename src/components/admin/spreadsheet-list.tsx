@@ -48,7 +48,7 @@ export function SpreadsheetList({
     e.preventDefault()
     setLoading(true)
     const finalAssignedTo = assignedTo === 'unassigned' ? null : assignedTo;
-    await createSpreadsheet({ title, embedUrl, assignedTo: finalAssignedTo }, userId)
+    await createSpreadsheet({ title, embedUrl, assignedTo: finalAssignedTo })
     setOpen(false)
     setTitle('')
     setEmbedUrl('')

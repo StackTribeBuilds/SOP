@@ -1,6 +1,8 @@
 import { prisma } from '@/lib/prisma'
 import { formatCurrency } from '@/lib/utils'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { PageHeader, Stat, StatStrip } from '@/components/layout/page-header'
+import { getMoneyBar } from '@/lib/actions'
+import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import {
   Table,
@@ -11,6 +13,8 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { WithdrawalForm } from './withdrawal-form'
+
+export const metadata = { title: 'Founder pay' };
 
 export default async function WithdrawalsPage() {
   const withdrawals = await prisma.founderWithdrawal.findMany({
@@ -28,24 +32,37 @@ export default async function WithdrawalsPage() {
     .reduce((s, w) => s + w.amount, 0)
 
   const users = await prisma.user.findMany({
-    where: { role: { in: ['FOUNDER', 'ADMIN'] } },
+    where: { role: { in: ['FOUNDER', 'CEO', 'CTO', 'ADMIN'] }, isActive: true },
     select: { id: true, name: true, role: true },
   })
 
+  const money = await getMoneyBar()
+  // Bible §16.7 stage 1: ₹20k per founder, paid only when cash allows
+  const target = users.length * 20000
+
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Founder Withdrawals</h1>
-          <p className="text-muted-foreground">
-            This month: {formatCurrency(monthlyTotal)} / ₹40,000 target
-          </p>
-        </div>
-        <WithdrawalForm founders={users} />
-      </div>
+      <PageHeader
+        title="Founder pay"
+        description="Paid on a fixed date, only when the business meets its cash floor. Never raised on one good month (§16.7)."
+        actions={<WithdrawalForm founders={users} />}
+      />
 
-      <Card>
-        <CardContent className="pt-6">
+      {money.zone === 'RED' && (
+        <div className="rounded-lg border border-bad/20 bg-bad-soft px-4 py-3 text-sm text-bad">
+          <span className="font-semibold">Cash is below the floor.</span> Discretionary withdrawals stop until it recovers (§16.4).
+        </div>
+      )}
+
+      <StatStrip>
+        <Stat label="Paid this month" value={formatCurrency(monthlyTotal)} tone={monthlyTotal > target ? 'warn' : undefined} />
+        <Stat label="Stage 1 budget" value={formatCurrency(target)} hint={`₹20,000 × ${users.length} founders`} />
+        <Stat label="Cash in bank" value={formatCurrency(money.cash)} tone={money.zone === 'RED' ? 'bad' : money.zone === 'YELLOW' ? 'warn' : 'good'}
+          hint={`Floor ${formatCurrency(money.floor)}`} />
+      </StatStrip>
+
+      <Card className="overflow-hidden">
+        <CardContent className="p-0">
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>

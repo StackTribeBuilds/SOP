@@ -31,7 +31,7 @@ export function DocumentList({ initialData, userId, isFounder }: { initialData: 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
-    await createDocument({ title, url, isSop }, userId)
+    await createDocument({ title, url, isSop })
     setOpen(false)
     setTitle('')
     setUrl('')

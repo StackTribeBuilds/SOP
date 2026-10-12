@@ -1,5 +1,7 @@
 "use client";
 
+import { toast } from 'sonner';
+
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { addLeadActivity } from "@/lib/crm-actions";
@@ -39,10 +41,10 @@ export function LeadActivityFeed({ leadId, initialActivities }: { leadId: string
         setNextActionDate("");
         router.refresh();
       } else {
-        alert("Failed to add note: " + res.error);
+        toast.error(`Could not add the note: ${res.error}`);
       }
     } catch (err) {
-      alert("An unexpected error occurred.");
+      toast.error('Could not add the note. Try again.');
     } finally {
       setLoading(false);
     }

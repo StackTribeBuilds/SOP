@@ -1,8 +1,11 @@
-import { getPnLData } from '@/lib/actions'
+import { getMoneyBar, getPnLData } from '@/lib/actions'
+import { PageHeader, Stat, StatStrip } from '@/components/layout/page-header'
 import { formatCurrency } from '@/lib/utils'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
 import { MonthSelector } from './month-selector'
+
+export const metadata = { title: 'Profit & loss' };
 
 export default async function PnLPage({
   searchParams,
@@ -17,21 +20,29 @@ export default async function PnLPage({
   const pnl = await getPnLData(year, month)
   const monthName = new Date(year, month).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })
 
+  const money = await getMoneyBar()
+
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Profit & Loss Statement</h1>
-          <p className="text-muted-foreground">{monthName}</p>
-        </div>
-        <MonthSelector currentYear={year} currentMonth={month} />
-      </div>
+      <PageHeader
+        title="Profit & loss"
+        description={`${monthName}. The four numbers the Bible says never to mix (§16.2).`}
+        actions={<MonthSelector currentYear={year} currentMonth={month} />}
+      />
+
+      <StatStrip>
+        <Stat label="Revenue" value={formatCurrency(pnl.revenue)} hint="Invoices raised this month" />
+        <Stat label="Collections" value={formatCurrency(pnl.collections)} tone="good" hint="Money that actually arrived" />
+        <Stat label="Net profit" value={formatCurrency(pnl.netProfit)} tone={pnl.netProfit < 0 ? 'bad' : 'good'}
+          hint={pnl.revenue > 0 ? `${((pnl.netProfit / pnl.revenue) * 100).toFixed(1)}% of revenue` : 'No revenue this month'} />
+        <Stat label="Cash in bank" value={formatCurrency(money.cash)} hint="Today, not this month" />
+      </StatStrip>
 
       <div className="grid gap-6 grid-cols-1 lg:grid-cols-2">
         {/* P&L Statement */}
         <Card>
           <CardHeader>
-            <CardTitle>Monthly P&L</CardTitle>
+            <CardTitle>Statement</CardTitle>
             <CardDescription>Revenue ≠ Cash ≠ Profit</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -40,44 +51,44 @@ export default async function PnLPage({
               <span className="font-medium">{formatCurrency(pnl.revenue)}</span>
             </div>
             <div className="flex justify-between items-center">
-              <span className="text-sm font-medium text-green-600">Collections (Cash In)</span>
-              <span className="font-bold text-green-600">{formatCurrency(pnl.collections)}</span>
+              <span className="text-sm font-medium text-good">Collections (cash in, shown for comparison)</span>
+              <span className="font-bold text-good">{formatCurrency(pnl.collections)}</span>
             </div>
             <Separator />
             <div className="flex justify-between items-center">
               <span className="text-sm">Direct Project Costs</span>
-              <span className="font-medium text-red-600">-{formatCurrency(pnl.projectCosts)}</span>
+              <span className="figure font-medium text-bad">-{formatCurrency(pnl.projectCosts)}</span>
             </div>
             <div className="flex justify-between items-center bg-muted/50 rounded px-2 py-1">
               <span className="text-sm font-semibold">Gross Profit</span>
-              <span className={`font-bold ${pnl.grossProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+              <span className={`font-bold ${pnl.grossProfit >= 0 ? 'text-good' : 'text-bad'}`}>
                 {formatCurrency(pnl.grossProfit)}
               </span>
             </div>
             <Separator />
             <div className="flex justify-between items-center">
               <span className="text-sm">Operating Expenses</span>
-              <span className="font-medium text-red-600">-{formatCurrency(pnl.operatingExpenses)}</span>
+              <span className="figure font-medium text-bad">-{formatCurrency(pnl.operatingExpenses)}</span>
             </div>
             <div className="flex justify-between items-center">
               <span className="text-sm">Founder Compensation</span>
-              <span className="font-medium text-red-600">-{formatCurrency(pnl.founderCompensation)}</span>
+              <span className="figure font-medium text-bad">-{formatCurrency(pnl.founderCompensation)}</span>
             </div>
             <div className="flex justify-between items-center">
               <span className="text-sm">Tax Provision (est.)</span>
-              <span className="font-medium text-red-600">-{formatCurrency(pnl.taxProvision)}</span>
+              <span className="figure font-medium text-bad">-{formatCurrency(pnl.taxProvision)}</span>
             </div>
             <Separator />
             <div className="flex justify-between items-center bg-primary/5 rounded px-2 py-2">
               <span className="text-base font-bold">Net Profit</span>
-              <span className={`text-lg font-bold ${pnl.netProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+              <span className={`text-lg font-bold ${pnl.netProfit >= 0 ? 'text-good' : 'text-bad'}`}>
                 {formatCurrency(pnl.netProfit)}
               </span>
             </div>
-            {pnl.collections > 0 && (
+            {pnl.revenue > 0 && (
               <p className="text-xs text-muted-foreground text-center">
-                Gross Margin: {((pnl.grossProfit / pnl.collections) * 100).toFixed(1)}%
-                | Net Margin: {((pnl.netProfit / pnl.collections) * 100).toFixed(1)}%
+                Gross Margin: {((pnl.grossProfit / pnl.revenue) * 100).toFixed(1)}%
+                | Net Margin: {((pnl.netProfit / pnl.revenue) * 100).toFixed(1)}%
               </p>
             )}
           </CardContent>
@@ -86,7 +97,7 @@ export default async function PnLPage({
         {/* Key Insight */}
         <Card>
           <CardHeader>
-            <CardTitle>Key Numbers</CardTitle>
+            <CardTitle>What it means</CardTitle>
           </CardHeader>
           <CardContent className="space-y-6">
             <div>
@@ -96,8 +107,8 @@ export default async function PnLPage({
               </p>
               <p className="text-xs text-muted-foreground">
                 {pnl.revenue > pnl.collections
-                  ? 'Revenue exceeds collections — money is stuck in receivables'
-                  : 'Collections exceed new revenue — collecting from prior months'}
+                  ? 'More was invoiced than collected. The difference is waiting in receivables.'
+                  : 'More was collected than invoiced, so earlier months are being paid off.'}
               </p>
             </div>
             <Separator />
