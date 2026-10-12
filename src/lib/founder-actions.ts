@@ -1,9 +1,11 @@
 'use server';
 
 import { prisma } from '@/lib/prisma';
+import { requireFounder } from '@/lib/session';
 import { startOfWeek, endOfWeek, addWeeks, startOfMonth, endOfMonth, subMonths } from 'date-fns';
 
 export async function getDailyFounderMetrics() {
+  await requireFounder();
   // Current bank balance
   const latestBalance = await prisma.bankBalance.findFirst({
     orderBy: { date: 'desc' },
@@ -49,6 +51,7 @@ export async function getDailyFounderMetrics() {
 }
 
 export async function getWeeklyMeetingData() {
+  await requireFounder();
   const now = new Date();
   
   const thisWeekStart = startOfWeek(now, { weekStartsOn: 1 });
@@ -93,6 +96,7 @@ export async function getWeeklyMeetingData() {
 }
 
 export async function getMonthlyReviewData(year: number, month: number) {
+  await requireFounder();
   // month is 1-indexed here, convert to 0-indexed for Date
   const date = new Date(year, month - 1, 1);
   const start = startOfMonth(date);
@@ -131,6 +135,7 @@ export async function getMonthlyReviewData(year: number, month: number) {
 }
 
 export async function getGlobalKPIs() {
+  await requireFounder();
   const [
     closedLeads,
     wonLeadsAgg,
@@ -191,6 +196,7 @@ export async function getGlobalKPIs() {
 }
 
 export async function saveMonthlyReview(year: number, month: number, retrospective: string) {
+  await requireFounder();
   const key = `monthly_retro_${year}_${month}`;
   await prisma.setting.upsert({
     where: { key },
@@ -200,7 +206,8 @@ export async function saveMonthlyReview(year: number, month: number, retrospecti
 }
 
 // Founder Reports actions
-export async function saveFounderDailyReport(userId: string, date: Date, data: any) {
+export async function saveFounderDailyReport(date: Date, data: any) {
+  const { id: userId } = await requireFounder();
   // Normalize date to start of day
   const normalizedDate = new Date(date);
   normalizedDate.setHours(0, 0, 0, 0);
@@ -221,7 +228,8 @@ export async function saveFounderDailyReport(userId: string, date: Date, data: a
   });
 }
 
-export async function saveFounderWeeklyReport(userId: string, weekStartDate: Date, data: any) {
+export async function saveFounderWeeklyReport(weekStartDate: Date, data: any) {
+  const { id: userId } = await requireFounder();
   const normalizedDate = new Date(weekStartDate);
   normalizedDate.setHours(0, 0, 0, 0);
 
@@ -241,7 +249,8 @@ export async function saveFounderWeeklyReport(userId: string, weekStartDate: Dat
   });
 }
 
-export async function saveFounderMonthlyReport(userId: string, year: number, month: number, data: any) {
+export async function saveFounderMonthlyReport(year: number, month: number, data: any) {
+  const { id: userId } = await requireFounder();
   return await prisma.founderMonthlyReport.upsert({
     where: {
       month_year_userId: {

@@ -1,12 +1,14 @@
 'use server';
 
 import { prisma } from '@/lib/prisma';
+import { requireUser } from '@/lib/session';
 import { LeadStage } from '@prisma/client';
 
 /**
  * Fetches all leads, optionally filtered by stage.
  */
 export async function getLeads(stage?: string) {
+  await requireUser();
   try {
     const whereClause = stage ? { stage: stage as LeadStage } : {};
     const leads = await prisma.lead.findMany({
@@ -28,6 +30,7 @@ export async function getLeads(stage?: string) {
  * Creates a new lead.
  */
 export async function createLead(data: any) {
+  const user = await requireUser();
   try {
     const lead = await prisma.lead.create({
       data: {
@@ -43,7 +46,7 @@ export async function createLead(data: any) {
         nextAction: data.nextAction,
         nextActionDate: data.nextActionDate ? new Date(data.nextActionDate) : new Date(),
         stage: 'NEW',
-        ownerId: data.ownerId, // Assumes ownerId is provided in data
+        ownerId: user.id,
       },
     });
     return { success: true, data: lead };
@@ -57,6 +60,7 @@ export async function createLead(data: any) {
  * Updates the stage of a lead (e.g., for Kanban board).
  */
 export async function updateLeadStage(id: string, stage: string) {
+  await requireUser();
   try {
     const lead = await prisma.lead.update({
       where: { id },
@@ -73,6 +77,7 @@ export async function updateLeadStage(id: string, stage: string) {
  * Updates the qualification fields of a lead.
  */
 export async function updateLeadQualification(id: string, data: any) {
+  await requireUser();
   try {
     const lead = await prisma.lead.update({
       where: { id },
@@ -100,6 +105,7 @@ export async function updateLeadQualification(id: string, data: any) {
  * Returns metrics for the sales dashboard.
  */
 export async function getPipelineMetrics() {
+  await requireUser();
   try {
     const leads = await prisma.lead.findMany({
       where: {
@@ -180,6 +186,7 @@ export async function getPipelineMetrics() {
  * Creates or updates a BdeDailyReport in Prisma for a user.
  */
 export async function logBdeActivity(data: any) {
+  const user = await requireUser();
   try {
     const reportDate = data.date ? new Date(data.date) : new Date();
     reportDate.setHours(0, 0, 0, 0);
@@ -200,13 +207,13 @@ export async function logBdeActivity(data: any) {
       where: {
         date_userId: {
           date: reportDate,
-          userId: data.userId,
+          userId: user.id,
         }
       },
       update: reportData,
       create: {
         date: reportDate,
-        userId: data.userId,
+        userId: user.id,
         ...reportData
       },
     });
@@ -222,7 +229,8 @@ export async function logBdeActivity(data: any) {
 /**
  * Fetches BDE metrics for the current week.
  */
-export async function getBdeMetrics(userId: string) {
+export async function getBdeMetrics() {
+  const { id: userId } = await requireUser();
   try {
     const startOfWeek = new Date();
     startOfWeek.setDate(startOfWeek.getDate() - startOfWeek.getDay());
@@ -267,8 +275,6 @@ export async function getBdeMetrics(userId: string) {
   }
 }
 
-import { getServerSession } from "next-auth/next";
-import { authOptions } from "./auth";
 import { revalidatePath } from "next/cache";
 
 export async function addLeadActivity(
@@ -277,11 +283,8 @@ export async function addLeadActivity(
   details?: string,
   updateNextAction?: { text: string; date: string }
 ) {
+  const user = await requireUser();
   try {
-    const session = await getServerSession(authOptions);
-    if (!session || !session.user) {
-      return { success: false, error: 'Unauthorized' };
-    }
 
     // 1. Create the activity note
     const activity = await prisma.activity.create({
@@ -290,7 +293,7 @@ export async function addLeadActivity(
         entityId: leadId,
         action,
         details,
-        userId: session.user.id
+        userId: user.id
       },
       include: {
         user: { select: { name: true } }
@@ -316,7 +319,7 @@ export async function addLeadActivity(
           entityId: leadId,
           action: 'Next Action Updated',
           details: `Set to: "${updateNextAction.text}" on ${nextDate.toLocaleDateString()}`,
-          userId: session.user.id
+          userId: user.id
         }
       });
     }

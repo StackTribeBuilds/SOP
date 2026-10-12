@@ -26,7 +26,7 @@ export default async function BdeDashboardPage() {
     )
   }
 
-  const result = await getBdeMetrics(session.user.id)
+  const result = await getBdeMetrics()
   
   if (!result.success) {
     return <div className="p-8">Error loading metrics: {result.error}</div>

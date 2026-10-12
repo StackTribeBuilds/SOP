@@ -58,7 +58,6 @@ export function LeadForm() {
     try {
       const data = {
         ...formData,
-        ownerId: (session?.user as any)?.id || 'default-owner-id', // Fallback if no session
       };
       
       const res = await createLead(data);

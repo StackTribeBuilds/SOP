@@ -30,7 +30,7 @@ export function WeeklyForm({ userId }: { userId: string }) {
       const startOfWeek = new Date();
       startOfWeek.setDate(startOfWeek.getDate() - startOfWeek.getDay() + 1); // Monday
       
-      await saveFounderWeeklyReport(userId, startOfWeek, form)
+      await saveFounderWeeklyReport(startOfWeek, form)
       toast.success("Weekly report saved successfully")
       router.refresh()
     } catch (err) {

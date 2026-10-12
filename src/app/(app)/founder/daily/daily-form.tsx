@@ -30,7 +30,7 @@ export function DailyFounderForm({ userId, metrics }: { userId: string, metrics:
     }
 
     try {
-      await saveFounderDailyReport(userId, new Date(), data)
+      await saveFounderDailyReport(new Date(), data)
       toast.success("Daily report saved successfully")
       router.refresh()
     } catch (err) {

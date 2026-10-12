@@ -1,7 +1,9 @@
 "use server"
 import { prisma } from "./prisma"
+import { requireFounder } from "./session"
 
 export async function getDealRoomData(projectId: string) {
+  await requireFounder()
   return await prisma.project.findUnique({
     where: { id: projectId },
     include: {
@@ -14,6 +16,7 @@ export async function getDealRoomData(projectId: string) {
 }
 
 export async function saveProjectDocs(projectId: string, proposalData: any, contractData: any) {
+  await requireFounder()
   return await prisma.project.update({
     where: { id: projectId },
     data: {
@@ -24,6 +27,7 @@ export async function saveProjectDocs(projectId: string, proposalData: any, cont
 }
 
 export async function saveInvoiceData(invoiceId: string, invoiceData: any, lineItems: any) {
+  await requireFounder()
   return await prisma.invoice.update({
     where: { id: invoiceId },
     data: {
@@ -35,6 +39,7 @@ export async function saveInvoiceData(invoiceId: string, invoiceData: any, lineI
 }
 
 export async function createInvoiceFromDealRoom(projectId: string, invoiceData: any, lineItems: any) {
+  await requireFounder()
   return await prisma.invoice.create({
     data: {
       invoiceNumber: invoiceData.invNo,

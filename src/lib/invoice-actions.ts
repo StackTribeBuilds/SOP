@@ -1,8 +1,10 @@
 "use server"
 
 import { prisma } from "./prisma"
+import { requireFounder } from "./session"
 
 export async function getInvoiceById(id: string) {
+  await requireFounder()
   return await prisma.invoice.findUnique({
     where: { id },
     include: {
@@ -14,6 +16,7 @@ export async function getInvoiceById(id: string) {
 }
 
 export async function generateInvoiceFromMilestone(milestoneId: string) {
+  await requireFounder()
   const milestone = await prisma.milestone.findUnique({
     where: { id: milestoneId },
     include: {

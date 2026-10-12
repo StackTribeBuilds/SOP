@@ -2,20 +2,24 @@
 
 import { revalidatePath } from 'next/cache';
 import { prisma } from './prisma';
+import { requireFounder } from './session';
 
 export async function getClients() {
+  await requireFounder();
   return await prisma.client.findMany({
     orderBy: { createdAt: 'desc' },
   });
 }
 
 export async function getClientById(id: string) {
+  await requireFounder();
   return await prisma.client.findUnique({
     where: { id },
   });
 }
 
 export async function updateClientOnboarding(id: string, data: any) {
+  await requireFounder();
   const updated = await prisma.client.update({
     where: { id },
     data: {
@@ -29,6 +33,7 @@ export async function updateClientOnboarding(id: string, data: any) {
 }
 
 export async function getProjects() {
+  await requireFounder();
   return await prisma.project.findMany({
     include: { client: true },
     orderBy: { createdAt: 'desc' },
@@ -36,6 +41,7 @@ export async function getProjects() {
 }
 
 export async function getProjectById(id: string) {
+  await requireFounder();
   return await prisma.project.findUnique({
     where: { id },
     include: { client: true, projectOwner: true, techOwner: true },
@@ -43,6 +49,7 @@ export async function getProjectById(id: string) {
 }
 
 export async function getProjectTasks(projectId: string) {
+  await requireFounder();
   return await prisma.task.findMany({
     where: { projectId },
     include: { assignee: true },
@@ -51,12 +58,14 @@ export async function getProjectTasks(projectId: string) {
 }
 
 export async function createTask(data: any) {
+  await requireFounder();
   const task = await prisma.task.create({ data });
   revalidatePath(`/projects/${data.projectId}`);
   return task;
 }
 
 export async function updateTaskStatus(taskId: string, status: any) {
+  await requireFounder();
   const task = await prisma.task.update({
     where: { id: taskId },
     data: { status },
@@ -66,6 +75,7 @@ export async function updateTaskStatus(taskId: string, status: any) {
 }
 
 export async function getChangeRequests(projectId: string) {
+  await requireFounder();
   return await prisma.changeRequest.findMany({
     where: { projectId },
     orderBy: { createdAt: 'desc' },
@@ -73,12 +83,14 @@ export async function getChangeRequests(projectId: string) {
 }
 
 export async function createChangeRequest(data: any) {
+  await requireFounder();
   const cr = await prisma.changeRequest.create({ data });
   revalidatePath(`/projects/${data.projectId}`);
   return cr;
 }
 
 export async function updateChangeRequestStatus(crId: string, status: any) {
+  await requireFounder();
   const cr = await prisma.changeRequest.update({
     where: { id: crId },
     data: { status },
@@ -88,6 +100,7 @@ export async function updateChangeRequestStatus(crId: string, status: any) {
 }
 
 export async function getMilestones(projectId: string) {
+  await requireFounder();
   return await prisma.milestone.findMany({
     where: { projectId },
     orderBy: { sortOrder: 'asc' },
@@ -95,17 +108,10 @@ export async function getMilestones(projectId: string) {
 }
 
 
-import { getServerSession } from 'next-auth/next';
-import { authOptions } from './auth';
 
 export async function createProject(data: { name: string; clientId: string; contractValue: number; startDate?: Date; description?: string }) {
+  const { id: userId } = await requireFounder();
   try {
-    const session = await getServerSession(authOptions);
-    if (!session || !session.user) {
-      return { success: false, error: 'Unauthorized' };
-    }
-
-    const userId = session.user.id;
 
     const project = await prisma.project.create({ 
       data: {
@@ -131,6 +137,7 @@ export async function createProject(data: { name: string; clientId: string; cont
 
 
 export async function updateProject(id: string, data: any) {
+  await requireFounder();
   try {
     const project = await prisma.project.update({
       where: { id },

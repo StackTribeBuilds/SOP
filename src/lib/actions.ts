@@ -1,6 +1,7 @@
 'use server'
 
 import { prisma } from './prisma'
+import { requireFounder } from './session'
 import { revalidatePath } from 'next/cache'
 
 // ============================================
@@ -8,6 +9,7 @@ import { revalidatePath } from 'next/cache'
 // ============================================
 
 export async function updateBankBalance(amount: number, notes?: string) {
+  await requireFounder()
   await prisma.bankBalance.create({
     data: { amount, notes },
   })
@@ -16,6 +18,7 @@ export async function updateBankBalance(amount: number, notes?: string) {
 }
 
 export async function getLatestBankBalance() {
+  await requireFounder()
   const balance = await prisma.bankBalance.findFirst({
     orderBy: { date: 'desc' },
   })
@@ -35,6 +38,7 @@ export async function logPayment(data: {
   reference?: string
   notes?: string
 }) {
+  await requireFounder()
   const payment = await prisma.payment.create({
     data: {
       amount: data.amount,
@@ -85,6 +89,7 @@ export async function logExpense(data: {
   notes?: string
   projectId?: string
 }) {
+  await requireFounder()
   const expense = await prisma.expense.create({
     data: {
       description: data.description,
@@ -113,6 +118,7 @@ export async function logWithdrawal(data: {
   type: string
   notes?: string
 }) {
+  await requireFounder()
   const withdrawal = await prisma.founderWithdrawal.create({
     data: {
       amount: data.amount,
@@ -145,6 +151,7 @@ export async function createInvoice(data: {
   nextActionDate?: string
   notes?: string
 }) {
+  await requireFounder()
   const expectedCash = data.amount * ((data.probabilityPercent ?? 100) / 100)
   
   const invoice = await prisma.invoice.create({
@@ -180,6 +187,7 @@ export async function updateInvoice(id: string, data: {
   nextActionDate?: string
   notes?: string
 }) {
+  await requireFounder()
   const updateData: any = { ...data }
   
   if (data.dueDate) updateData.dueDate = new Date(data.dueDate)
@@ -211,6 +219,7 @@ export async function createClient(data: {
   decisionMakerName?: string
   communicationChannel?: string
 }) {
+  await requireFounder()
   const client = await prisma.client.create({
     data: {
       company: data.company,
@@ -244,6 +253,7 @@ export async function createProject(data: {
   exclusions?: string
   estimatedHours?: number
 }) {
+  await requireFounder()
   const project = await prisma.project.create({
     data: {
       name: data.name,
@@ -269,11 +279,13 @@ export async function createProject(data: {
 // ============================================
 
 export async function getSetting(key: string): Promise<string | null> {
+  await requireFounder()
   const setting = await prisma.setting.findUnique({ where: { key } })
   return setting?.value ?? null
 }
 
 export async function setSetting(key: string, value: string) {
+  await requireFounder()
   await prisma.setting.upsert({
     where: { key },
     create: { key, value },
@@ -287,6 +299,7 @@ export async function setSetting(key: string, value: string) {
 // ============================================
 
 export async function getDashboardData() {
+  await requireFounder()
   const [bankBalance, invoices, payments, expenses, withdrawals, projects, settings, leads, milestones, recentLeads] = await Promise.all([
     prisma.bankBalance.findFirst({ orderBy: { date: 'desc' } }),
     prisma.invoice.findMany({
@@ -395,6 +408,7 @@ export async function getDashboardData() {
 // ============================================
 
 export async function getReceivablesData() {
+  await requireFounder()
   const invoices = await prisma.invoice.findMany({
     where: {
       status: { notIn: ['PAID', 'CANCELLED'] },
@@ -446,6 +460,7 @@ export async function getReceivablesData() {
 // ============================================
 
 export async function getPnLData(year: number, month: number) {
+  await requireFounder()
   const startDate = new Date(year, month, 1)
   const endDate = new Date(year, month + 1, 0, 23, 59, 59)
 
@@ -496,6 +511,7 @@ export async function getPnLData(year: number, month: number) {
 // ============================================
 
 export async function getCashFlowForecast() {
+  await requireFounder()
   const bankBalance = await prisma.bankBalance.findFirst({
     orderBy: { date: 'desc' },
   })
