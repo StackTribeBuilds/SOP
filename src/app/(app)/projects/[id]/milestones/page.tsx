@@ -2,6 +2,8 @@ import { notFound } from "next/navigation";
 import { getMilestones, getProjectById } from "@/lib/project-actions";
 import { MilestoneManager } from "./milestone-manager";
 
+export const metadata = { title: 'Milestones & billing' };
+
 export default async function MilestonesPage({
   params,
 }: {

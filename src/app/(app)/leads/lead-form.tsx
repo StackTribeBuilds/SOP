@@ -2,6 +2,8 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { Plus } from 'lucide-react';
+import { toast } from 'sonner';
 import { createLead } from '@/lib/crm-actions';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -21,8 +23,12 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 
-export function LeadForm() {
-  const [open, setOpen] = useState(false);
+type DialogControl = { open?: boolean; onOpenChange?: (open: boolean) => void; hideTrigger?: boolean };
+
+export function LeadForm({ open: openProp, onOpenChange, hideTrigger }: DialogControl = {}) {
+  const [openState, setOpenState] = useState(false);
+  const open = openProp ?? openState;
+  const setOpen = (v: boolean) => { setOpenState(v); onOpenChange?.(v); };
   const [loading, setLoading] = useState(false);
   const router = useRouter();
 
@@ -59,11 +65,15 @@ export function LeadForm() {
       };
       
       const res = await createLead(data);
-      if (res.success) {
+      if (res.success && res.data) {
+        const leadId = res.data.id;
         setOpen(false);
         router.refresh();
+        toast.success(`${data.company} added`, {
+          action: { label: 'Open lead', onClick: () => router.push(`/leads/${leadId}`) },
+        });
       } else {
-        alert('Failed to create lead');
+        toast.error('Could not add the lead. Check the required fields and try again.');
       }
     } catch (error) {
       console.error(error);
@@ -74,12 +84,12 @@ export function LeadForm() {
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button>Add Lead</Button>
-      </DialogTrigger>
+      {!hideTrigger && <DialogTrigger asChild>
+        <Button><Plus className="h-4 w-4" /> New lead</Button>
+      </DialogTrigger>}
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Create New Lead</DialogTitle>
+          <DialogTitle>New lead</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4 py-4">
           <div className="grid grid-cols-2 gap-4">

@@ -1,5 +1,7 @@
 'use client';
 
+import { toast } from 'sonner';
+
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { getProjectTasks, getMilestones, getProjectById } from '@/lib/project-actions';
@@ -86,13 +88,13 @@ export default function UpdatesPage() {
 
   const copyToClipboard = () => {
     navigator.clipboard.writeText(updateText);
-    alert('Copied to clipboard!');
+    toast.success('Update copied. Paste it into WhatsApp or email.');
   };
 
   return (
-    <div className="p-6 max-w-4xl mx-auto space-y-6">
+    <div className="max-w-4xl space-y-6">
       <div className="flex justify-between items-center">
-        <h1 className="text-3xl font-bold">Weekly Update Generator</h1>
+        <h1 className="text-[26px] font-semibold leading-tight tracking-[-0.02em]">Client update</h1>
         <Button onClick={copyToClipboard} className="flex items-center gap-2">
           <Copy className="h-4 w-4" />
           Copy to Clipboard

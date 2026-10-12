@@ -1,8 +1,11 @@
 'use client';
 
+import { toast } from 'sonner';
+
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createProject } from '@/lib/project-actions';
+import { Plus } from "lucide-react";
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -52,11 +55,11 @@ export function ProjectForm({ clients }: { clients: any[] }) {
         router.refresh();
         setFormData({ name: '', clientId: '', contractValue: '', description: '' });
       } else {
-        alert('Failed to create project: ' + result.error);
+        toast.error(`Could not create the project: ${result.error}`);
       }
     } catch (error) {
       console.error(error);
-      alert('An unexpected error occurred');
+      toast.error('Could not create the project. Try again.');
     } finally {
       setLoading(false);
     }
@@ -65,7 +68,7 @@ export function ProjectForm({ clients }: { clients: any[] }) {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button>New Project</Button>
+        <Button><Plus className="h-4 w-4" /> New project</Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>

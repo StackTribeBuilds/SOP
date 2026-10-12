@@ -8,6 +8,8 @@ import { MonthlyRetrospectiveForm } from "./monthly-form"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 
+export const metadata = { title: 'Monthly review' };
+
 export default async function MonthlyReviewPage() {
   const session = await getServerSession(authOptions)
   const now = new Date();
@@ -16,7 +18,7 @@ export default async function MonthlyReviewPage() {
   return (
     <div className="flex flex-col gap-8 p-8">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Monthly Review</h1>
+        <h1 className="text-[26px] font-semibold leading-tight tracking-[-0.02em]">Monthly Review</h1>
         <p className="text-muted-foreground">Review your monthly performance and retrospectives.</p>
       </div>
 

@@ -2,7 +2,6 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -17,46 +16,12 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog'
 import { updateBankBalance } from '@/lib/actions'
-import {
-  Banknote,
-  Plus,
-  Wallet,
-  ArrowDownUp,
-} from 'lucide-react'
+import { Banknote } from 'lucide-react'
 
-export function DashboardQuickActions() {
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-lg">Quick Actions</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        <UpdateBalanceDialog />
-        <Button variant="outline" className="w-full justify-start gap-2" asChild>
-          <a href="/finance/receivables">
-            <Plus className="h-4 w-4" />
-            Add Invoice
-          </a>
-        </Button>
-        <Button variant="outline" className="w-full justify-start gap-2" asChild>
-          <a href="/finance/expenses">
-            <Wallet className="h-4 w-4" />
-            Log Expense
-          </a>
-        </Button>
-        <Button variant="outline" className="w-full justify-start gap-2" asChild>
-          <a href="/finance/withdrawals">
-            <ArrowDownUp className="h-4 w-4" />
-            Log Withdrawal
-          </a>
-        </Button>
-      </CardContent>
-    </Card>
-  )
-}
-
-function UpdateBalanceDialog() {
-  const [open, setOpen] = useState(false)
+export function UpdateBalanceDialog({ open: openProp, onOpenChange, hideTrigger, compact }: { open?: boolean; onOpenChange?: (open: boolean) => void; hideTrigger?: boolean; compact?: boolean } = {}) {
+  const [openState, setOpenState] = useState(false)
+  const open = openProp ?? openState
+  const setOpen = (v: boolean) => { setOpenState(v); onOpenChange?.(v) }
   const [amount, setAmount] = useState('')
   const [notes, setNotes] = useState('')
   const [loading, setLoading] = useState(false)
@@ -75,22 +40,28 @@ function UpdateBalanceDialog() {
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button variant="outline" className="w-full justify-start gap-2">
-          <Banknote className="h-4 w-4" />
-          Update Bank Balance
-        </Button>
-      </DialogTrigger>
+      {!hideTrigger && (
+        <DialogTrigger asChild>
+          {compact ? (
+            <Button variant="outline" size="sm">Update</Button>
+          ) : (
+            <Button variant="outline" className="w-full justify-start gap-2">
+              <Banknote className="h-4 w-4" />
+              Update bank balance
+            </Button>
+          )}
+        </DialogTrigger>
+      )}
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Update Bank Balance</DialogTitle>
+          <DialogTitle>Update bank balance</DialogTitle>
           <DialogDescription>
-            Enter the current balance in your bank account.
+            Enter today&apos;s balance from the bank app. The cash zone and forecast start from this number.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="balance">Current Balance (₹)</Label>
+            <Label htmlFor="balance">Balance today (₹)</Label>
             <Input
               id="balance"
               type="number"
@@ -112,7 +83,7 @@ function UpdateBalanceDialog() {
           </div>
           <DialogFooter>
             <Button type="submit" disabled={loading}>
-              {loading ? 'Saving...' : 'Update Balance'}
+              {loading ? 'Saving...' : 'Save balance'}
             </Button>
           </DialogFooter>
         </form>

@@ -3,6 +3,8 @@ import { SpreadsheetList } from '@/components/admin/spreadsheet-list'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 
+export const metadata = { title: 'Sheets' };
+
 export default async function SpreadsheetsPage() {
   const session = await getServerSession(authOptions)
   const sheets = await getSpreadsheets()

@@ -7,6 +7,8 @@ import { formatCurrency } from "@/lib/utils"
 import { IndianRupee, Target, TrendingUp, Users } from "lucide-react"
 import { CommissionRateForm } from "./commission-rate-form"
 
+export const metadata = { title: 'KPIs' };
+
 const ZONE_BADGE = { GREEN: "success", YELLOW: "warning", RED: "danger" } as const
 
 function Row({ label, hint, value, tone }: { label: string; hint?: string; value: React.ReactNode; tone?: string }) {
@@ -42,9 +44,9 @@ export default async function GlobalKPIDashboardPage() {
   const commission = (amount: number) => (rate != null ? formatCurrency((amount * rate) / 100) : "—")
 
   return (
-    <div className="flex flex-col gap-8 p-4 md:p-8">
+    <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Executive KPI Dashboard</h1>
+        <h1 className="text-[26px] font-semibold leading-tight tracking-[-0.02em]">KPIs</h1>
         <p className="text-muted-foreground">Bible §23. Every figure uses the same rules as the P&amp;L, Receivables and Sales pages.</p>
       </div>
 

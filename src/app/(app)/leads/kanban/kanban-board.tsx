@@ -5,8 +5,8 @@ import Link from 'next/link';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import { LeadStage } from '@prisma/client';
 import { updateLeadStage } from '@/lib/crm-actions';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
+import { LEAD_STAGE_LABEL } from '@/lib/labels';
+import { formatCurrency } from '@/lib/utils';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -32,6 +32,7 @@ interface Lead {
 export function KanbanBoard({ initialLeads }: { initialLeads: Lead[] }) {
   const [leads, setLeads] = useState<Lead[]>(initialLeads);
   const [isMounted, setIsMounted] = useState(false);
+  const [todayStart] = useState(() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d; });
   // A drop onto LOST waits here until a reason is given
   const [pendingLost, setPendingLost] = useState<{ id: string; company: string } | null>(null);
   const [lostReason, setLostReason] = useState('');
@@ -112,14 +113,18 @@ export function KanbanBoard({ initialLeads }: { initialLeads: Lead[] }) {
       </DialogContent>
     </Dialog>
     <DragDropContext onDragEnd={onDragEnd}>
-      <div className="flex gap-4 h-full pb-4">
+      <div className="flex gap-3 h-full pb-4">
         {STAGES.map(stage => {
           const stageLeads = leads.filter(l => l.stage === stage);
+          const stageValue = stageLeads.reduce((sum, l) => sum + (l.estimatedBudget ?? 0), 0);
+          const closed = stage === 'WON' || stage === 'LOST';
           return (
-            <div key={stage} className="flex-shrink-0 w-80 flex flex-col bg-muted/50 rounded-lg p-3">
-              <div className="flex items-center justify-between mb-3 px-1">
-                <h3 className="font-semibold">{stage.replace('_', ' ')}</h3>
-                <Badge variant="secondary">{stageLeads.length}</Badge>
+            <div key={stage} className={`flex-shrink-0 w-72 flex flex-col rounded-lg p-2 ${closed ? 'bg-muted/40' : 'bg-muted/70'}`}>
+              <div className="flex items-baseline justify-between px-1.5 pb-2 pt-1">
+                <h3 className="text-[13px] font-semibold">
+                  {LEAD_STAGE_LABEL[stage]} <span className="figure ml-1 font-normal text-muted-foreground">{stageLeads.length}</span>
+                </h3>
+                {stageValue > 0 && <span className="figure text-xs text-muted-foreground">{formatCurrency(stageValue)}</span>}
               </div>
               
               <Droppable droppableId={stage}>
@@ -127,45 +132,42 @@ export function KanbanBoard({ initialLeads }: { initialLeads: Lead[] }) {
                   <div
                     {...provided.droppableProps}
                     ref={provided.innerRef}
-                    className={`flex-1 overflow-y-auto space-y-3 min-h-[150px] p-1 rounded-md transition-colors ${
-                      snapshot.isDraggingOver ? 'bg-muted/80' : ''
+                    className={`flex-1 overflow-y-auto space-y-2 min-h-[150px] p-0.5 rounded-md transition-colors ${
+                      snapshot.isDraggingOver ? 'bg-primary-soft' : ''
                     }`}
                   >
                     {stageLeads.map((lead, index) => (
                       <Draggable key={lead.id} draggableId={lead.id} index={index}>
                         {(provided, snapshot) => (
-                          <Card
+                          <div
                             ref={provided.innerRef}
                             {...provided.draggableProps}
                             {...provided.dragHandleProps}
-                            className={`shadow-sm ${snapshot.isDragging ? 'shadow-md ring-2 ring-primary/20' : ''}`}
+                            className={`rounded-md border bg-card p-3 text-sm ${snapshot.isDragging ? 'shadow-lg ring-2 ring-primary/30' : 'hover:border-primary/40'}`}
                           >
-                            <CardHeader className="p-3 pb-2">
-                              <CardTitle className="text-base">
-                                <Link href={`/leads/${lead.id}`} className="hover:underline text-primary">
-                                  {lead.company}
-                                </Link>
-                              </CardTitle>
-                            </CardHeader>
-                            <CardContent className="p-3 pt-0 text-sm space-y-2">
-                              <div className="text-muted-foreground">{lead.contactName}</div>
-                              {lead.estimatedBudget && (
-                                <div className="font-medium">
-                                  ₹{lead.estimatedBudget.toLocaleString()}
-                                </div>
-                              )}
-                              {(lead.nextAction || lead.nextActionDate) && (
-                                <div className="text-xs bg-muted p-2 rounded-md mt-2">
-                                  <div className="font-medium truncate">{lead.nextAction}</div>
+                            <div className="flex items-start justify-between gap-2">
+                              <Link href={`/leads/${lead.id}`} className="font-medium leading-snug hover:text-primary">
+                                {lead.company}
+                              </Link>
+                              {lead.estimatedBudget ? (
+                                <span className="figure shrink-0 text-[13px] font-semibold">{formatCurrency(lead.estimatedBudget)}</span>
+                              ) : null}
+                            </div>
+                            <p className="text-xs text-muted-foreground">{lead.contactName}</p>
+                            {!closed && (lead.nextAction || lead.nextActionDate) && (() => {
+                              const late = !!lead.nextActionDate && new Date(lead.nextActionDate) < todayStart;
+                              return (
+                                <div className={`mt-2.5 border-t pt-2 text-xs ${late ? 'text-bad' : 'text-muted-foreground'}`}>
+                                  <p className="truncate text-foreground">{lead.nextAction}</p>
                                   {lead.nextActionDate && (
-                                    <div className="text-muted-foreground mt-1">
-                                      {format(new Date(lead.nextActionDate), 'MMM d, yyyy')}
-                                    </div>
+                                    <p className={late ? 'font-medium' : ''}>
+                                      {format(new Date(lead.nextActionDate), 'd MMM')}{late ? ' · late' : ''}
+                                    </p>
                                   )}
                                 </div>
-                              )}
-                            </CardContent>
-                          </Card>
+                              );
+                            })()}
+                          </div>
                         )}
                       </Draggable>
                     ))}

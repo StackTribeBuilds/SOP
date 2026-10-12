@@ -10,73 +10,33 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { AlertTriangle, CheckCircle, Clock, Ban } from 'lucide-react'
+import { PageHeader, Stat, StatStrip } from '@/components/layout/page-header'
 import { SendInvoiceDialog, CancelInvoiceButton, LogPaymentDialog } from '@/components/finance/invoice-controls'
+
+export const metadata = { title: 'Receivables' };
 
 export default async function ReceivablesPage() {
   const { receivables, agingSummary, drafts } = await getReceivablesData()
   const totalOutstanding = receivables.reduce((s, r) => s + r.outstanding, 0)
   const totalExpected = receivables.reduce((s, r) => s + r.expectedCash, 0)
 
+  const overdueTotal = agingSummary['1-30'] + agingSummary['31-60'] + agingSummary['60+']
+
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Accounts Receivable</h1>
-        <p className="text-muted-foreground">Track every rupee owed to StackTribe</p>
-      </div>
+      <PageHeader
+        title="Receivables"
+        description="Every rupee owed to StackTribe. Remind 3 days before due, escalate to a founder at 7 days overdue (§13.1)."
+      />
 
-      {/* Aging Buckets */}
-      <div className="grid gap-4 grid-cols-2 lg:grid-cols-5">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Total Outstanding</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-xl font-bold">{formatCurrency(totalOutstanding)}</div>
-            <p className="text-xs text-muted-foreground">Expected: {formatCurrency(totalExpected)}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-green-600 flex items-center gap-1">
-              <CheckCircle className="h-3 w-3" /> Current
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-xl font-bold">{formatCurrency(agingSummary.current)}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-yellow-600 flex items-center gap-1">
-              <Clock className="h-3 w-3" /> 1-30 Days
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-xl font-bold">{formatCurrency(agingSummary['1-30'])}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-orange-600 flex items-center gap-1">
-              <AlertTriangle className="h-3 w-3" /> 31-60 Days
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-xl font-bold">{formatCurrency(agingSummary['31-60'])}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-red-600 flex items-center gap-1">
-              <Ban className="h-3 w-3" /> 60+ Days
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-xl font-bold">{formatCurrency(agingSummary['60+'])}</div>
-          </CardContent>
-        </Card>
-      </div>
+      <StatStrip>
+        <Stat label="Owed to us" value={formatCurrency(totalOutstanding)} hint={`${formatCurrency(totalExpected)} expected at current probabilities`} />
+        <Stat label="Not yet due" value={formatCurrency(agingSummary.current)} tone="good" />
+        <Stat label="1–30 days late" value={formatCurrency(agingSummary['1-30'])} tone={agingSummary['1-30'] > 0 ? 'warn' : undefined} />
+        <Stat label="31–60 days late" value={formatCurrency(agingSummary['31-60'])} tone={agingSummary['31-60'] > 0 ? 'bad' : undefined} />
+        <Stat label="60+ days late" value={formatCurrency(agingSummary['60+'])} tone={agingSummary['60+'] > 0 ? 'bad' : undefined}
+          hint={overdueTotal > 0 ? `${Math.round((overdueTotal / Math.max(totalOutstanding, 1)) * 100)}% of receivables overdue` : undefined} />
+      </StatStrip>
 
       {/* Drafts: not owed until sent */}
       {drafts.length > 0 && (
@@ -108,7 +68,7 @@ export default async function ReceivablesPage() {
                       <TableCell className="text-sm text-muted-foreground">
                         {d.project?.name ?? '—'}{d.milestone ? ` · ${d.milestone.name}` : ''}
                       </TableCell>
-                      <TableCell className="text-right font-medium">{formatCurrency(d.amount)}</TableCell>
+                      <TableCell className="figure text-right text-[15px] font-semibold">{formatCurrency(d.amount)}</TableCell>
                       <TableCell>{new Date(d.dueDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' })}</TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-1">
@@ -126,74 +86,66 @@ export default async function ReceivablesPage() {
       )}
 
       {/* Receivables Table */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Invoice Details</CardTitle>
+      <Card className="overflow-hidden">
+        <CardHeader className="pb-3">
+          <CardTitle>Sent invoices</CardTitle>
+          <p className="text-xs text-muted-foreground">Oldest due first. Log a payment the day it reaches the bank.</p>
         </CardHeader>
-        <CardContent>
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Client</TableHead>
-                  <TableHead>Invoice</TableHead>
-                  <TableHead className="text-right">Outstanding</TableHead>
-                  <TableHead>Due Date</TableHead>
-                  <TableHead>Aging</TableHead>
-                  <TableHead>Probability</TableHead>
-                  <TableHead className="text-right">Expected Cash</TableHead>
-                  <TableHead>Owner</TableHead>
-                  <TableHead>Next Action</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Client</TableHead>
+              <TableHead className="text-right">Outstanding</TableHead>
+              <TableHead>Due</TableHead>
+              <TableHead className="text-right">Expected</TableHead>
+              <TableHead>Next action</TableHead>
+              <TableHead className="text-right"><span className="sr-only">Actions</span></TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {receivables.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={6} className="text-center py-10 text-muted-foreground">
+                  Nothing owed right now. Send invoices from a project&apos;s milestones.
+                </TableCell>
+              </TableRow>
+            ) : (
+              receivables.map((r) => (
+                <TableRow key={r.id}>
+                  <TableCell>
+                    <p className="font-medium">{r.client.company}</p>
+                    <p className="whitespace-nowrap text-xs text-muted-foreground">
+                      {r.invoiceNumber}{r.project ? ` · ${r.project.name}` : ''}
+                    </p>
+                  </TableCell>
+                  <TableCell className="figure text-right text-[15px] font-semibold whitespace-nowrap">
+                    {formatCurrency(r.outstanding)}
+                    {r.paidAmount > 0 && <p className="font-sans text-xs font-normal text-muted-foreground">of {formatCurrency(r.amount)}</p>}
+                  </TableCell>
+                  <TableCell className="whitespace-nowrap">
+                    <p className={r.daysOverdue > 0 ? 'text-bad font-medium' : ''}>
+                      {new Date(r.dueDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+                    </p>
+                    <Badge variant={r.agingBucket === 'Current' ? 'success' : r.agingBucket === '1-30 days' ? 'warning' : 'danger'} className="mt-0.5">
+                      {r.daysOverdue > 0 ? `${r.daysOverdue} days late${r.daysOverdue >= 7 ? ' · escalate' : ''}` : 'Not due yet'}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-right whitespace-nowrap">
+                    <p className="figure text-muted-foreground">{formatCurrency(r.expectedCash)}</p>
+                    <p className="text-xs text-muted-foreground">{r.probabilityPercent}% {r.probability.toLowerCase()}</p>
+                  </TableCell>
+                  <TableCell className="max-w-[240px]">
+                    <p className="truncate text-sm">{r.nextAction || <span className="text-muted-foreground">No next action</span>}</p>
+                    <p className="text-xs text-muted-foreground">{r.owner.name}</p>
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <LogPaymentDialog invoice={r} />
+                  </TableCell>
                 </TableRow>
-              </TableHeader>
-              <TableBody>
-                {receivables.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={10} className="text-center py-8 text-muted-foreground">
-                      No outstanding receivables 🎉
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  receivables.map((r) => (
-                    <TableRow key={r.id}>
-                      <TableCell className="font-medium">{r.client.company}</TableCell>
-                      <TableCell>{r.invoiceNumber}</TableCell>
-                      <TableCell className="text-right font-medium">{formatCurrency(r.outstanding)}</TableCell>
-                      <TableCell>
-                        <span className={r.daysOverdue > 0 ? 'text-red-600 font-medium' : ''}>
-                          {new Date(r.dueDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' })}
-                        </span>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={
-                          r.agingBucket === 'Current' ? 'success' :
-                          r.agingBucket === '1-30 days' ? 'warning' :
-                          'danger'
-                        }>
-                          {r.daysOverdue > 0 ? `${r.daysOverdue}d overdue` : 'Current'}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="outline">
-                          {r.probabilityPercent}% — {r.probability}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-right">{formatCurrency(r.expectedCash)}</TableCell>
-                      <TableCell className="text-sm">{r.owner.name}</TableCell>
-                      <TableCell className="text-sm text-muted-foreground max-w-[200px] truncate">
-                        {r.nextAction || '—'}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <LogPaymentDialog invoice={r} />
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </div>
-        </CardContent>
+              ))
+            )}
+          </TableBody>
+        </Table>
       </Card>
     </div>
   )

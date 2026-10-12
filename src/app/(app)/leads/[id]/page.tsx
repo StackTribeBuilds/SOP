@@ -3,11 +3,15 @@ import { prisma } from '@/lib/prisma';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { format } from 'date-fns';
-import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 import { LeadActivityFeed } from './lead-activity-feed';
+import { ArrowLeft } from 'lucide-react';
+import { PageHeader } from '@/components/layout/page-header';
+import { LEAD_STAGE_BADGE, LEAD_STAGE_LABEL } from '@/lib/labels';
 import { QualificationDialog } from './qualification-dialog';
 import { missingQualification } from '@/lib/gates';
+
+export const metadata = { title: 'Lead' };
 
 export default async function LeadDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = await params;
@@ -33,27 +37,25 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
   });
 
   return (
-    <div className="flex-1 space-y-6 p-4 md:p-8 pt-6">
-      <div className="flex items-center justify-between space-y-2">
-        <div>
-          <div className="flex items-center gap-3">
-            <h2 className="text-3xl font-bold tracking-tight">{lead.company}</h2>
-            <Badge variant={lead.stage === 'WON' ? 'default' : lead.stage === 'LOST' ? 'destructive' : 'secondary'} className="text-sm">
-              {lead.stage.replace('_', ' ')}
-            </Badge>
-          </div>
-          <p className="text-muted-foreground mt-1">Lead Details & History</p>
-        </div>
-        <div className="flex space-x-2">
-          <Link href="/leads">
-            <Button variant="outline">Back to Leads</Button>
-          </Link>
-          <QualificationDialog lead={lead} missing={missing} />
-        </div>
+    <div className="space-y-6">
+      <div>
+        <Link href="/leads" className="mb-3 flex w-fit items-center gap-1 text-[13px] text-muted-foreground hover:text-foreground">
+          <ArrowLeft className="h-3.5 w-3.5" /> Leads
+        </Link>
+        <PageHeader
+          title={lead.company}
+          description={
+            <span className="inline-flex flex-wrap items-center gap-2">
+              <Badge variant={LEAD_STAGE_BADGE[lead.stage]}>{LEAD_STAGE_LABEL[lead.stage]}</Badge>
+              <span>{lead.contactName} · owned by {lead.owner?.name ?? 'nobody'}</span>
+            </span>
+          }
+          actions={<QualificationDialog lead={lead} missing={missing} />}
+        />
       </div>
 
       {missing.length > 0 && !['WON', 'LOST'].includes(lead.stage) && (
-        <div className="rounded-lg border border-yellow-200 bg-yellow-50 px-4 py-3 text-sm text-yellow-800">
+        <div className="rounded-lg border border-warn/20 bg-warn-soft px-4 py-3 text-sm text-warn">
           Not qualified yet. Add the {missing.join(', ')} before this lead can move to Qualified (Gate 2).
         </div>
       )}

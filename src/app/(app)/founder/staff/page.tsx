@@ -2,13 +2,15 @@ import { getUsers } from '@/lib/admin-actions'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 
+export const metadata = { title: 'Team' };
+
 export default async function StaffPage() {
   const users = await getUsers()
 
   return (
-    <div className="space-y-6 max-w-6xl mx-auto p-4 md:p-8 pt-6">
+    <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold">Staff & Team Management</h1>
+        <h1 className="text-[26px] font-semibold leading-tight tracking-[-0.02em]">Team</h1>
         <p className="text-muted-foreground mt-1">Manage team members and their roles</p>
       </div>
 

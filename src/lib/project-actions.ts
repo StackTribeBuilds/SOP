@@ -549,3 +549,75 @@ export async function changeProjectStatus(projectId: string, to: ProjectStatus, 
   revalidatePath('/dashboard');
   return { success: true };
 }
+
+// ============================================
+// LIST VIEWS: the numbers each list needs, worked out once on the server
+// ============================================
+
+export async function getProjectsOverview() {
+  await requireFounder();
+  const projects = await prisma.project.findMany({
+    include: {
+      client: { select: { id: true, company: true, isOnboarded: true } },
+      // Every invoice on the project, including change requests and ones not tied to a milestone
+      invoices: { where: { status: { not: 'CANCELLED' } }, select: { status: true, amount: true, paidAmount: true } },
+      milestones: {
+        orderBy: { sortOrder: 'asc' },
+        include: { invoices: { where: { status: { not: 'CANCELLED' } }, select: { status: true, amount: true, paidAmount: true } } },
+      },
+    },
+    orderBy: { createdAt: 'desc' },
+  });
+
+  return projects.map(p => {
+    const invoices = p.invoices;
+    const collected = invoices.reduce((s, i) => s + i.paidAmount, 0);
+    const invoiced = invoices.filter(i => i.status !== 'DRAFT').reduce((s, i) => s + i.amount, 0);
+    // The next milestone that still needs work or money
+    const next = p.milestones.find(m => !m.invoices.some(i => i.status === 'PAID'));
+    return {
+      id: p.id,
+      name: p.name,
+      client: p.client,
+      status: p.status,
+      health: p.health,
+      contractValue: p.contractValue,
+      completionPercentage: p.completionPercentage,
+      isRecurring: p.isRecurring,
+      expectedEndDate: p.expectedEndDate,
+      collected,
+      owed: invoiced - collected,
+      milestoneCount: p.milestones.length,
+      nextMilestone: next ? { name: next.name, dueDate: next.dueDate, amount: next.paymentAmount, invoiced: next.invoices.length > 0 } : null,
+    };
+  });
+}
+
+export async function getClientsOverview() {
+  await requireFounder();
+  const clients = await prisma.client.findMany({
+    include: {
+      projects: { select: { id: true, status: true, contractValue: true } },
+      invoices: { where: { status: { notIn: ['DRAFT', 'CANCELLED'] } }, select: { amount: true, paidAmount: true } },
+    },
+    orderBy: { createdAt: 'desc' },
+  });
+
+  return clients.map(c => {
+    const done = ONBOARDING_ITEMS.filter(i => c[i.id]).length;
+    const nextItem = ONBOARDING_ITEMS.find(i => !c[i.id]);
+    return {
+      id: c.id,
+      company: c.company,
+      primaryContactName: c.primaryContactName,
+      primaryContactEmail: c.primaryContactEmail,
+      onboardingDone: done,
+      onboardingTotal: ONBOARDING_ITEMS.length,
+      nextOnboardingStep: nextItem?.label ?? null,
+      activeProjects: c.projects.filter(p => p.status === 'IN_PROGRESS' || p.status === 'NOT_STARTED').length,
+      contracted: c.projects.filter(p => p.status !== 'CANCELLED').reduce((s, p) => s + p.contractValue, 0),
+      collected: c.invoices.reduce((s, i) => s + i.paidAmount, 0),
+      owed: c.invoices.reduce((s, i) => s + Math.max(0, i.amount - i.paidAmount), 0),
+    };
+  });
+}

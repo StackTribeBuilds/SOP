@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma'
 import { formatCurrency } from '@/lib/utils'
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
+import { PageHeader, Stat, StatStrip } from '@/components/layout/page-header'
+import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import {
   Table,
@@ -11,6 +12,8 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { ExpenseForm } from './expense-form'
+
+export const metadata = { title: 'Expenses' };
 
 export default async function ExpensesPage() {
   const expenses = await prisma.expense.findMany({
@@ -26,20 +29,29 @@ export default async function ExpensesPage() {
     })
     .reduce((s, e) => s + e.amount, 0)
 
+  const recurringMonthly = expenses.filter(e => e.isRecurring).reduce((s, e) => s + e.amount, 0)
+  const byCategory = new Map<string, number>()
+  expenses
+    .filter(e => { const d = new Date(e.date); return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear() })
+    .forEach(e => byCategory.set(e.category, (byCategory.get(e.category) ?? 0) + e.amount))
+  const top = [...byCategory.entries()].sort((a, b) => b[1] - a[1])[0]
+
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Expenses</h1>
-          <p className="text-muted-foreground">
-            This month: {formatCurrency(monthlyTotal)}
-          </p>
-        </div>
-        <ExpenseForm />
-      </div>
+      <PageHeader
+        title="Expenses"
+        description="What StackTribe spends. Recurring expenses feed the cash forecast every week."
+        actions={<ExpenseForm />}
+      />
 
-      <Card>
-        <CardContent className="pt-6">
+      <StatStrip>
+        <Stat label="This month" value={formatCurrency(monthlyTotal)} />
+        <Stat label="Recurring each month" value={formatCurrency(recurringMonthly)} hint="Included in the 13-week forecast" />
+        <Stat label="Biggest category" value={top ? formatCurrency(top[1]) : '—'} hint={top ? top[0].replace(/_/g, ' ').toLowerCase() : 'Nothing this month'} />
+      </StatStrip>
+
+      <Card className="overflow-hidden">
+        <CardContent className="p-0">
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>

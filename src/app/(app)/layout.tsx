@@ -2,6 +2,9 @@ import { redirect } from 'next/navigation'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { Sidebar } from '@/components/layout/sidebar'
+import { MoneyBar } from '@/components/layout/money-bar'
+import { getMoneyBar } from '@/lib/actions'
+import { isFounderRole } from '@/lib/session'
 
 export default async function AppLayout({
   children,
@@ -14,14 +17,22 @@ export default async function AppLayout({
     redirect('/login')
   }
 
+  // Founders see the money on every page; BDEs don't have finance access
+  const moneyBar = isFounderRole(session.user.role) ? await getMoneyBar() : null
+
   return (
     <div className="min-h-screen bg-background">
       <Sidebar />
-      <main className="lg:pl-64">
-        <div className="px-4 py-6 sm:px-6 lg:px-8 pt-16 lg:pt-6">
+      <div className="lg:pl-60">
+        {moneyBar ? (
+          <MoneyBar data={moneyBar} />
+        ) : (
+          <div className="h-14 lg:hidden" />
+        )}
+        <main className="mx-auto max-w-[1400px] px-4 pb-16 pt-6 sm:px-6 lg:px-8">
           {children}
-        </div>
-      </main>
+        </main>
+      </div>
     </div>
   )
 }

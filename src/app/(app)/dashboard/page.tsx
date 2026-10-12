@@ -1,332 +1,155 @@
-
 import { redirect } from 'next/navigation'
+import Link from 'next/link'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
-import { getDashboardData } from '@/lib/actions'
-import { formatCurrency, getCashZone } from '@/lib/utils'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import { CashZoneIndicator } from '@/components/layout/cash-zone-indicator'
-import { DashboardQuickActions } from './quick-actions'
-import Link from 'next/link'
-import {
-  Banknote,
-  TrendingDown,
-  AlertTriangle,
-  Clock,
-  IndianRupee,
-  FolderKanban,
-  Users,
-  Target,
-  Bell,
-  ArrowRight
-} from 'lucide-react'
+import { getMoneyBar, getTodayData } from '@/lib/actions'
+import { cn, formatCurrency } from '@/lib/utils'
+import { PageHeader } from '@/components/layout/page-header'
+import { TodayQueue } from './today-queue'
+import { UpdateBalanceDialog } from './quick-actions'
 
+export const metadata = { title: 'Today' }
 
-export default async function DashboardPage() {
+const ZONE_COPY = {
+  GREEN: { tone: 'text-good', bar: 'bg-good', advice: 'Healthy reserve. Operate normally.' },
+  YELLOW: { tone: 'text-warn', bar: 'bg-warn', advice: 'Near the floor. Freeze unnecessary spending and push collections (§16.4).' },
+  RED: { tone: 'text-bad', bar: 'bg-bad', advice: 'Below the floor. Stop discretionary withdrawals, collect aggressively, ask for advances (§16.4).' },
+}
+
+export default async function TodayPage() {
   const session = await getServerSession(authOptions)
-  if (!session || !session.user) redirect('/login')
-  
-  const role = (session.user as any).role
-  if (role === 'BDE' || role === 'BUSINESS_ANALYST') {
-    redirect('/bde')
-  }
+  if (!session?.user) redirect('/login')
+  const role = session.user.role
+  if (role === 'BDE' || role === 'BUSINESS_ANALYST') redirect('/bde')
 
-  const data = await getDashboardData()
+  const [today, money] = await Promise.all([getTodayData(), getMoneyBar()])
 
-  const zone = getCashZone(data.currentCash, data.minimumFloor)
-  
   const now = new Date()
-  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-  
-  // Action Plan logic
-  const urgentLeads = data.activeLeads?.filter((l: any) => l.nextActionDate && new Date(l.nextActionDate) <= now) || []
-  const upcomingMilestones = data.pendingMilestones?.filter((m: any) => m.dueDate && new Date(m.dueDate) <= new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)) || []
+  const hour = Number(now.toLocaleString('en-IN', { hour: 'numeric', hour12: false, timeZone: 'Asia/Kolkata' }))
+  const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening'
+  const dateLine = now.toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'Asia/Kolkata' })
+  const urgent = today.items.filter(i => i.severity === 2).length
+
+  const zone = ZONE_COPY[money.zone]
+  // Bar runs to 2× the floor so the floor sits in the middle
+  const scale = Math.max(money.floor * 2, money.cash, 1)
+  const cashPct = Math.max(0, Math.min(100, (money.cash / scale) * 100))
+  const floorPct = (money.floor / scale) * 100
+  const maxStage = Math.max(...today.pipelineByStage.map(s => s.value), 1)
+  const firstName = session.user.name?.split(' ')[0] ?? ''
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Command Center</h1>
-          <p className="text-muted-foreground">StackTribe Operations & Financial Overview</p>
-        </div>
-        <CashZoneIndicator
-          currentCash={data.currentCash}
-          minimumFloor={data.minimumFloor}
-        />
-      </div>
+      <PageHeader
+        title={`${greeting}, ${firstName}`}
+        description={
+          today.items.length === 0
+            ? `${dateLine}. Nothing is waiting on you.`
+            : `${dateLine}. ${today.items.length} thing${today.items.length === 1 ? '' : 's'} need you${urgent ? `, ${urgent} of them now` : ''}.`
+        }
+      />
 
-      {/* Zone Alert */}
-      {zone === 'RED' && (
-        <div className="rounded-lg bg-red-50 border border-red-200 p-4 flex items-start gap-3">
-          <AlertTriangle className="h-5 w-5 text-red-600 mt-0.5 shrink-0" />
-          <div>
-            <p className="font-semibold text-red-800">🔴 RED ZONE — Cash Below Minimum Floor</p>
-            <p className="text-sm text-red-700 mt-1">
-              Freeze discretionary spending. Stop founder withdrawals. Aggressive collections mode.
-              Minimum floor: {formatCurrency(data.minimumFloor)}
-            </p>
-          </div>
-        </div>
-      )}
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
+        <TodayQueue items={today.items} />
 
-      {/* Operations & Pipeline Overview */}
-      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
-        {/* Active Projects */}
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Active Projects</CardTitle>
-            <FolderKanban className="h-4 w-4 text-primary" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{data.activeProjects?.length || 0}</div>
-            <p className="text-xs text-muted-foreground mt-1">Currently in progress</p>
-          </CardContent>
-        </Card>
-
-        {/* Active Leads */}
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Open Leads</CardTitle>
-            <Users className="h-4 w-4 text-blue-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{data.activeLeads?.length || 0}</div>
-            <p className="text-xs text-muted-foreground mt-1">Not yet won or lost</p>
-          </CardContent>
-        </Card>
-        
-        {/* Cash in Bank */}
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Cash in Bank</CardTitle>
-            <Banknote className="h-4 w-4 text-green-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{formatCurrency(data.currentCash)}</div>
-            <p className="text-xs text-muted-foreground mt-1">Floor: {formatCurrency(data.minimumFloor)}</p>
-          </CardContent>
-        </Card>
-
-        {/* Total Receivable */}
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Total Receivable</CardTitle>
-            <IndianRupee className="h-4 w-4 text-orange-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{formatCurrency(data.totalReceivable)}</div>
-            <p className="text-xs text-muted-foreground mt-1">Expected: {formatCurrency(data.expectedCash)}</p>
-          </CardContent>
-        </Card>
-      </div>
-
-      <div className="grid gap-6 grid-cols-1 lg:grid-cols-3">
-        {/* Action Plan for Today */}
-        <Card className="lg:col-span-2 border-primary/20 shadow-sm">
-          <CardHeader className="bg-primary/5 pb-4 border-b">
-            <div className="flex items-center gap-2">
-              <Target className="h-5 w-5 text-primary" />
-              <CardTitle className="text-lg">Action Plan for Today</CardTitle>
+        <div className="space-y-6">
+          {/* Cash position against the floor (§16.3–16.4) */}
+          <section className="surface overflow-hidden p-5">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-[15px] font-semibold">Cash position</h2>
+                <p className={cn('mt-0.5 text-xs', zone.tone)}>{zone.advice}</p>
+              </div>
+              <UpdateBalanceButton />
             </div>
-            <CardDescription>Your immediate priorities across leads and projects</CardDescription>
-          </CardHeader>
-          <CardContent className="p-0">
-            <div className="divide-y">
-              {urgentLeads.length > 0 ? (
-                urgentLeads.map((lead: any) => (
-                  <div key={lead.id} className="p-4 flex items-center justify-between hover:bg-muted/50 transition-colors">
-                    <div className="flex flex-col">
-                      <span className="font-semibold text-sm flex items-center gap-2">
-                        <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-200">LEAD</Badge>
-                        {lead.company}
-                      </span>
-                      <span className="text-sm text-muted-foreground mt-1">Action: {lead.nextAction}</span>
-                    </div>
-                    <Link href={`/leads/${lead.id}`}>
-                      <Button size="sm" variant="ghost">View <ArrowRight className="h-4 w-4 ml-1"/></Button>
-                    </Link>
-                  </div>
-                ))
-              ) : null}
+            <p className="figure mt-4 text-[32px] font-semibold leading-none">{formatCurrency(money.cash)}</p>
+            <div className="relative mt-3 h-2 rounded-full bg-muted" aria-hidden>
+              <div className={cn('h-2 rounded-full', zone.bar)} style={{ width: `${cashPct}%` }} />
+              <div className="absolute -top-1 h-4 w-px bg-foreground/60" style={{ left: `${floorPct}%` }} />
+            </div>
+            <p className="mt-1.5 text-xs text-muted-foreground">
+              Floor {formatCurrency(money.floor)}
+            </p>
 
-              {upcomingMilestones.length > 0 ? (
-                upcomingMilestones.map((ms: any) => (
-                  <div key={ms.id} className="p-4 flex items-center justify-between hover:bg-muted/50 transition-colors">
-                    <div className="flex flex-col">
-                      <span className="font-semibold text-sm flex items-center gap-2">
-                        <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">PROJECT</Badge>
-                        {ms.project?.name || 'Milestone Due'}
-                      </span>
-                      <span className="text-sm text-muted-foreground mt-1">{ms.title} (Due: {new Date(ms.dueDate).toLocaleDateString()})</span>
-                    </div>
-                    <Link href={`/projects/${ms.projectId}/milestones`}>
-                      <Button size="sm" variant="ghost">View <ArrowRight className="h-4 w-4 ml-1"/></Button>
-                    </Link>
-                  </div>
-                ))
-              ) : null}
-
-              {urgentLeads.length === 0 && upcomingMilestones.length === 0 && (
-                <div className="p-8 text-center text-muted-foreground">
-                  <p>No immediate actions required today. You're all caught up! 🎉</p>
+            <dl className="mt-5 space-y-2 border-t pt-4 text-sm">
+              <div className="flex justify-between gap-3">
+                <dt className="text-muted-foreground">Expected in this week</dt>
+                <dd className="figure font-semibold text-good">+{formatCurrency(today.thisWeek.expectedIn)}</dd>
+              </div>
+              <div className="flex justify-between gap-3">
+                <dt className="text-muted-foreground">Going out this week</dt>
+                <dd className="figure font-semibold">−{formatCurrency(today.thisWeek.expectedOut)}</dd>
+              </div>
+              <div className="flex justify-between gap-3">
+                <dt className="text-muted-foreground">Lowest point in 13 weeks</dt>
+                <dd className={cn('figure font-semibold', today.lowestWeek.closingCash < money.floor && 'text-bad')}>
+                  {formatCurrency(today.lowestWeek.closingCash)}
+                  <span className="ml-1 font-sans text-xs font-normal text-muted-foreground">
+                    W{today.lowestWeek.weekNumber}
+                  </span>
+                </dd>
+              </div>
+              {today.atRiskOverdue > 0 && (
+                <div className="flex justify-between gap-3">
+                  <dt className="text-muted-foreground">Overdue 30+ days (not counted)</dt>
+                  <dd className="figure font-semibold text-bad">{formatCurrency(today.atRiskOverdue)}</dd>
                 </div>
               )}
+            </dl>
+            <Link href="/finance/forecast" className="mt-4 inline-block text-xs font-medium text-primary hover:underline">
+              Open 13-week forecast
+            </Link>
+          </section>
+
+          {/* Pipeline by stage */}
+          <section className="surface overflow-hidden p-5">
+            <div className="flex items-baseline justify-between">
+              <h2 className="text-[15px] font-semibold">Pipeline</h2>
+              <span className="figure text-sm text-muted-foreground">{formatCurrency(money.weightedPipeline)} weighted</span>
             </div>
-          </CardContent>
-        </Card>
-
-        
-      {/* FOUNDER INSIGHTS / ATTENTION REQUIRED */}
-      <div className="grid gap-6 md:grid-cols-3">
-        <Card className="border-red-200">
-          <CardHeader className="bg-red-50/50 pb-4">
-            <CardTitle className="text-red-700 flex items-center text-sm font-bold">
-              <AlertTriangle className="w-4 h-4 mr-2" />
-              Overdue Finances
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="pt-4">
-            {data.insights?.overdueInvoices?.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No overdue invoices.</p>
-            ) : (
-              <div className="space-y-3">
-                {data.insights?.overdueInvoices?.map((inv: any) => (
-                  <div key={inv.id} className="text-sm border-b pb-2">
-                    <div className="font-semibold">{inv.client?.company || 'Unknown Client'}</div>
-                    <div className="flex justify-between mt-1 text-red-600">
-                      <span>₹{inv.amount.toLocaleString()}</span>
-                      <span>Due: {new Date(inv.dueDate).toLocaleDateString()}</span>
-                    </div>
+            <ul className="mt-4 space-y-3">
+              {today.pipelineByStage.map(s => (
+                <li key={s.stage}>
+                  <div className="flex justify-between text-xs">
+                    <span>{s.stage.charAt(0) + s.stage.slice(1).toLowerCase()} <span className="text-muted-foreground">· {s.count}</span></span>
+                    <span className="figure font-medium">{formatCurrency(s.value)}</span>
                   </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card className="border-amber-200">
-          <CardHeader className="bg-amber-50/50 pb-4">
-            <CardTitle className="text-amber-700 flex items-center text-sm font-bold">
-              <Clock className="w-4 h-4 mr-2" />
-              At-Risk Projects
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="pt-4">
-            {data.insights?.delayedProjects?.length === 0 ? (
-              <p className="text-sm text-muted-foreground">All projects on track.</p>
-            ) : (
-              <div className="space-y-3">
-                {data.insights?.delayedProjects?.map((proj: any) => (
-                  <Link key={proj.id} href={`/projects/${proj.id}`} className="block text-sm p-2 hover:bg-slate-50 border rounded-md">
-                    <div className="font-semibold">{proj.name}</div>
-                    <Badge variant="destructive" className="mt-1">{proj.health.replace('_', ' ')}</Badge>
-                  </Link>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card className="border-blue-200">
-          <CardHeader className="bg-blue-50/50 pb-4">
-            <CardTitle className="text-blue-700 flex items-center text-sm font-bold">
-              <Users className="w-4 h-4 mr-2" />
-              Missing Staff Reports
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="pt-4">
-            {data.insights?.missingReports?.length === 0 ? (
-              <p className="text-sm text-muted-foreground">All sales reps have reported today.</p>
-            ) : (
-              <div className="space-y-2">
-                {data.insights?.missingReports?.map((staff: any) => (
-                  <div key={staff.id} className="text-sm p-2 bg-slate-50 border rounded-md flex justify-between items-center">
-                    <span className="font-medium">{staff.name}</span>
-                    <span className="text-xs text-muted-foreground">{staff.role}</span>
+                  <div className="mt-1 h-1.5 rounded-full bg-muted">
+                    <div className="h-1.5 rounded-full bg-primary/70" style={{ width: `${(s.value / maxStage) * 100}%` }} />
                   </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Quick Actions */}
-        <DashboardQuickActions />
-      </div>
-
-      <div className="grid gap-6 grid-cols-1 lg:grid-cols-2">
-        {/* Receivables Table */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg flex items-center gap-2"><Clock className="h-5 w-5 text-muted-foreground"/> Outstanding Invoices</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {data.unpaidInvoices.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-4">No outstanding invoices.</p>
-            ) : (
-              <div className="space-y-4">
-                {data.unpaidInvoices.map((invoice) => {
-                  const isOverdue = new Date(invoice.dueDate) < new Date()
-                  return (
-                    <div key={invoice.id} className="flex justify-between items-center border-b pb-3 last:border-0 last:pb-0">
-                      <div>
-                        <p className="font-medium text-sm">{invoice.client.company}</p>
-                        <p className="text-xs text-muted-foreground">{invoice.invoiceNumber} • {new Date(invoice.dueDate).toLocaleDateString()}</p>
-                      </div>
-                      <div className="text-right">
-                        <p className="font-bold">{formatCurrency(invoice.amount - invoice.paidAmount)}</p>
-                        <Badge variant={isOverdue ? 'danger' : 'secondary'} className="mt-1 text-[10px]">
-                          {isOverdue ? 'Overdue' : 'Pending'}
-                        </Badge>
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Recent Activities (Leads & Payments) */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg flex items-center gap-2"><Bell className="h-5 w-5 text-muted-foreground"/> Recent Activity</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {data.recentLeads?.slice(0, 3).map((lead: any) => (
-                <div key={lead.id} className="flex gap-3 border-b pb-3 last:border-0 last:pb-0">
-                  <div className="mt-0.5 rounded-full bg-blue-100 p-1.5 h-7 w-7 flex items-center justify-center shrink-0">
-                    <Users className="h-3.5 w-3.5 text-blue-600" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium">New Lead Added: {lead.company}</p>
-                    <p className="text-xs text-muted-foreground">{new Date(lead.createdAt).toLocaleDateString()}</p>
-                  </div>
-                </div>
+                </li>
               ))}
-              
-              {data.recentPayments?.slice(0, 3).map((payment: any) => (
-                <div key={payment.id} className="flex gap-3 border-b pb-3 last:border-0 last:pb-0">
-                  <div className="mt-0.5 rounded-full bg-green-100 p-1.5 h-7 w-7 flex items-center justify-center shrink-0">
-                    <Banknote className="h-3.5 w-3.5 text-green-600" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium">Payment Received</p>
-                    <p className="text-xs text-muted-foreground">
-                      {formatCurrency(payment.amount)} — {payment.description}
-                    </p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
+            </ul>
+            <Link href="/leads/kanban" className="mt-4 inline-block text-xs font-medium text-primary hover:underline">Open lead board</Link>
+          </section>
+
+          {/* Money that actually arrived */}
+          <section className="surface overflow-hidden p-5">
+            <h2 className="text-[15px] font-semibold">Recent payments</h2>
+            {today.recentPayments.length === 0 ? (
+              <p className="mt-3 text-sm text-muted-foreground">No payments logged yet. Log them from Receivables as they arrive.</p>
+            ) : (
+              <ul className="mt-3 divide-y text-sm">
+                {today.recentPayments.map(p => (
+                  <li key={p.id} className="flex items-center justify-between gap-3 py-2">
+                    <div className="min-w-0">
+                      <p className="truncate">{p.client.company}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {new Date(p.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}{p.method ? ` · ${p.method}` : ''}
+                      </p>
+                    </div>
+                    <span className="figure font-semibold text-good">+{formatCurrency(p.amount)}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        </div>
       </div>
     </div>
   )
+}
+
+function UpdateBalanceButton() {
+  return <UpdateBalanceDialog compact />
 }
