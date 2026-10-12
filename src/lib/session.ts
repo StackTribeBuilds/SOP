@@ -12,19 +12,27 @@ export class AuthError extends Error {
   }
 }
 
-// Server actions are public POST endpoints, so every action must call one of
-// these. The role is read from the database, not the JWT, so deactivating a
-// user or changing their role takes effect immediately.
-export async function requireUser() {
+// The signed-in user as the database sees them, or null when the session cookie
+// points at an account that is missing or deactivated (for example a cookie
+// issued by another environment on the same host). Pages use this to send the
+// person back to sign in instead of crashing.
+export async function getCurrentUser() {
   const session = await getServerSession(authOptions)
-  if (!session?.user?.id) throw new AuthError()
+  if (!session?.user?.id) return null
 
   const user = await prisma.user.findUnique({
     where: { id: session.user.id },
     select: { id: true, name: true, email: true, role: true, isActive: true },
   })
-  if (!user || !user.isActive) throw new AuthError()
+  return user && user.isActive ? user : null
+}
 
+// Server actions are public POST endpoints, so every action must call one of
+// these. The role is read from the database, not the JWT, so deactivating a
+// user or changing their role takes effect immediately.
+export async function requireUser() {
+  const user = await getCurrentUser()
+  if (!user) throw new AuthError()
   return user
 }
 

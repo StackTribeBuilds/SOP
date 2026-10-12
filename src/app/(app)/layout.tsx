@@ -1,24 +1,23 @@
 import { redirect } from 'next/navigation'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
 import { Sidebar } from '@/components/layout/sidebar'
 import { MoneyBar } from '@/components/layout/money-bar'
 import { getMoneyBar } from '@/lib/actions'
-import { isFounderRole } from '@/lib/session'
+import { getCurrentUser, isFounderRole } from '@/lib/session'
 
 export default async function AppLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
-  const session = await getServerSession(authOptions)
-
-  if (!session) {
-    redirect('/login')
+  // Checked against the database, not just the cookie: a cookie for a missing
+  // or deactivated account is treated as signed out
+  const user = await getCurrentUser()
+  if (!user) {
+    redirect('/login?reason=session')
   }
 
   // Founders see the money on every page; BDEs don't have finance access
-  const moneyBar = isFounderRole(session.user.role) ? await getMoneyBar() : null
+  const moneyBar = isFounderRole(user.role) ? await getMoneyBar() : null
 
   return (
     <div className="min-h-screen bg-background">
