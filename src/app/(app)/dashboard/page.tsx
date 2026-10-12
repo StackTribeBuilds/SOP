@@ -89,12 +89,12 @@ export default async function DashboardPage() {
         {/* Active Leads */}
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Active Leads</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">Open Leads</CardTitle>
             <Users className="h-4 w-4 text-blue-500" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{data.activeLeads?.length || 0}</div>
-            <p className="text-xs text-muted-foreground mt-1">In pipeline</p>
+            <p className="text-xs text-muted-foreground mt-1">Not yet won or lost</p>
           </CardContent>
         </Card>
         

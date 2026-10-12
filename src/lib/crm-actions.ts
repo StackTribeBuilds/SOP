@@ -4,6 +4,9 @@ import { prisma } from '@/lib/prisma';
 import { requireUser } from '@/lib/session';
 import { LeadStage } from '@prisma/client';
 import { checkLeadMove } from '@/lib/gates';
+import { BDE_STAGE_COUNTS, PIPELINE_STAGES, STAGE_PROBABILITY, weekStart, winRate } from '@/lib/kpis';
+import { addDays, startOfDay } from 'date-fns';
+import { revalidatePath } from 'next/cache';
 
 /**
  * Fetches all leads, optionally filtered by stage.
@@ -49,6 +52,9 @@ export async function createLead(data: any) {
         stage: 'NEW',
         ownerId: user.id,
       },
+    });
+    await prisma.activity.create({
+      data: { entityType: 'Lead', entityId: lead.id, action: 'Created', details: `Source: ${lead.source}`, userId: user.id },
     });
     return { success: true, data: lead };
   } catch (error: any) {
@@ -187,79 +193,76 @@ export async function updateLeadQualification(id: string, data: LeadQualificatio
 export async function getPipelineMetrics() {
   await requireUser();
   try {
-    const leads = await prisma.lead.findMany({
-      where: {
-        stage: {
-          in: ['DISCOVERY', 'PROPOSAL', 'NEGOTIATION', 'WON', 'LOST']
-        }
-      }
-    });
+    const [openLeads, closed] = await Promise.all([
+      prisma.lead.findMany({ where: { stage: { in: PIPELINE_STAGES } } }),
+      prisma.lead.findMany({ where: { stage: { in: ['WON', 'LOST'] } }, select: { stage: true, estimatedBudget: true } }),
+    ]);
 
-    let totalValue = 0;
-    let weightedValue = 0;
-    let activeDeals = 0;
-    let wonDeals = 0;
-    let totalDeals = 0;
+    // Pipeline = qualified open deals only; won deals are revenue, not pipeline
+    const totalValue = openLeads.reduce((sum, l) => sum + (l.estimatedBudget || 0), 0);
+    const weightedValue = openLeads.reduce((sum, l) => sum + (l.estimatedBudget || 0) * (STAGE_PROBABILITY[l.stage] ?? 0), 0);
+    const won = closed.filter(l => l.stage === 'WON');
+    const lostCount = closed.length - won.length;
 
-    const stageData = {
-      DISCOVERY: { name: 'Discovery', value: 0 },
-      PROPOSAL: { name: 'Proposal', value: 0 },
-      NEGOTIATION: { name: 'Negotiation', value: 0 },
-      WON: { name: 'Won', value: 0 }
-    };
-
-    leads.forEach((lead: any) => {
-      if (lead.stage !== 'LOST') {
-        totalDeals++;
-        const value = lead.estimatedBudget || 0;
-        
-        // Basic probabilities for weighted value if none exists
-        let prob = 0;
-        if (lead.stage === 'DISCOVERY') prob = 0.2;
-        if (lead.stage === 'PROPOSAL') prob = 0.5;
-        if (lead.stage === 'NEGOTIATION') prob = 0.8;
-        if (lead.stage === 'WON') prob = 1;
-
-        if (lead.stage !== 'WON') {
-          activeDeals++;
-        } else {
-          wonDeals++;
-        }
-
-        totalValue += value;
-        weightedValue += (value * prob);
-
-        if (stageData[lead.stage as keyof typeof stageData]) {
-          stageData[lead.stage as keyof typeof stageData].value += value;
-        }
-      } else {
-        totalDeals++; // Count LOST in total for win rate
-      }
-    });
-
-    const winRate = totalDeals > 0 ? (wonDeals / totalDeals) * 100 : 0;
-    
     const pipelineChartData = [
-      stageData.DISCOVERY,
-      stageData.PROPOSAL,
-      stageData.NEGOTIATION,
-      stageData.WON
+      ...PIPELINE_STAGES.map(stage => ({
+        name: stage.charAt(0) + stage.slice(1).toLowerCase(),
+        value: openLeads.filter(l => l.stage === stage).reduce((sum, l) => sum + (l.estimatedBudget || 0), 0),
+      })),
+      { name: 'Won', value: won.reduce((sum, l) => sum + (l.estimatedBudget || 0), 0) },
     ];
 
-    return { 
-      success: true, 
+    return {
+      success: true,
       data: {
         totalValue,
         weightedValue,
-        activeDeals,
-        winRate,
-        pipelineChartData
+        activeDeals: openLeads.length,
+        winRate: winRate(won.length, lostCount),
+        pipelineChartData,
       }
     };
   } catch (error: any) {
     console.error('Error fetching pipeline metrics:', error);
     return { success: false, error: error.message };
   }
+}
+
+// Counts a BDE's work from the CRM itself (§18.2), so reports match what actually happened
+async function crmActivityCounts(userId: string, from: Date, to: Date) {
+  const [newProspects, stageMoves, notes] = await Promise.all([
+    prisma.lead.count({ where: { ownerId: userId, createdAt: { gte: from, lt: to } } }),
+    prisma.activity.findMany({
+      where: { userId, entityType: 'Lead', action: 'Stage changed', createdAt: { gte: from, lt: to } },
+      select: { entityId: true, details: true },
+    }),
+    prisma.activity.count({
+      where: { userId, entityType: 'Lead', action: 'Added Note / Update', createdAt: { gte: from, lt: to } },
+    }),
+  ]);
+
+  // Each lead counts once per stage, even if it was moved back and forth
+  const movedInto = (stage: string) =>
+    new Set(stageMoves.filter(a => a.details?.endsWith(`→ ${stage}`)).map(a => a.entityId)).size;
+
+  return {
+    newProspects,
+    contacted: movedInto(BDE_STAGE_COUNTS.contacted),
+    replies: movedInto(BDE_STAGE_COUNTS.replies),
+    qualified: movedInto(BDE_STAGE_COUNTS.qualified),
+    meetingsBooked: movedInto(BDE_STAGE_COUNTS.meetingsBooked),
+    proposalsRequested: movedInto(BDE_STAGE_COUNTS.proposalsRequested),
+    followUps: notes,
+  };
+}
+
+export type BdeCounts = Awaited<ReturnType<typeof crmActivityCounts>>;
+
+// Today's CRM counts, used to pre-fill the end-of-day report
+export async function getTodayCrmCounts(): Promise<BdeCounts> {
+  const { id } = await requireUser();
+  const from = startOfDay(new Date());
+  return crmActivityCounts(id, from, addDays(from, 1));
 }
 
 /**
@@ -312,20 +315,18 @@ export async function logBdeActivity(data: any) {
 export async function getBdeMetrics() {
   const { id: userId } = await requireUser();
   try {
-    const startOfWeek = new Date();
-    startOfWeek.setDate(startOfWeek.getDate() - startOfWeek.getDay());
-    startOfWeek.setHours(0, 0, 0, 0);
-
+    const from = weekStart();
     const now = new Date();
 
-    const [reports, activeLeads] = await Promise.all([
+    const [reports, activeLeads, crm] = await Promise.all([
       prisma.bdeDailyReport.findMany({
-        where: { userId, date: { gte: startOfWeek } },
+        where: { userId, date: { gte: from } },
         orderBy: { date: 'desc' },
       }),
       prisma.lead.findMany({
         where: { ownerId: userId, stage: { notIn: ['WON', 'LOST'] } }
-      })
+      }),
+      crmActivityCounts(userId, from, addDays(from, 7)),
     ]);
 
     // Calculate action plan metrics
@@ -336,10 +337,19 @@ export async function getBdeMetrics() {
       return daysSinceUpdate > 7; // Stalled for more than 7 days
     });
 
+    const reported = (k: keyof BdeCounts) => reports.reduce((sum, r) => sum + r[k], 0);
+
     const metrics = {
-      meetingsBooked: reports.reduce((sum: number, r: any) => sum + r.meetingsBooked, 0),
-      prospectsContacted: reports.reduce((sum: number, r: any) => sum + r.contacted, 0),
-      qualified: reports.reduce((sum: number, r: any) => sum + r.qualified, 0),
+      // Scorecard numbers come from the CRM; the self-reported totals are shown next to them
+      meetingsBooked: crm.meetingsBooked,
+      prospectsContacted: crm.contacted,
+      qualified: crm.qualified,
+      reported: {
+        meetingsBooked: reported('meetingsBooked'),
+        prospectsContacted: reported('contacted'),
+        qualified: reported('qualified'),
+      },
+      crm,
       recentReports: reports,
       actionPlan: {
         overdue: overdueLeads,
@@ -354,8 +364,6 @@ export async function getBdeMetrics() {
     return { success: false, error: error.message };
   }
 }
-
-import { revalidatePath } from "next/cache";
 
 export async function addLeadActivity(
   leadId: string, 

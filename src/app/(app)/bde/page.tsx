@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
-import { getBdeMetrics } from '@/lib/crm-actions'
+import { getBdeMetrics, getTodayCrmCounts } from '@/lib/crm-actions'
 import { BdeReportForm } from './report-form'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Calendar, Users, Target, AlertTriangle, Clock, XCircle } from 'lucide-react'
@@ -26,13 +26,16 @@ export default async function BdeDashboardPage() {
     )
   }
 
-  const result = await getBdeMetrics()
+  const [result, crmToday] = await Promise.all([getBdeMetrics(), getTodayCrmCounts()])
   
   if (!result.success) {
     return <div className="p-8">Error loading metrics: {result.error}</div>
   }
 
-  const { meetingsBooked, prospectsContacted, qualified, actionPlan } = (result.data || {}) as any
+  const { meetingsBooked, prospectsContacted, qualified, reported, actionPlan } = (result.data || {}) as any
+  // Scorecard comes from CRM stage moves; self-reported totals are shown so gaps are visible
+  const vsReported = (crm: number, self: number) =>
+    crm === self ? 'Matches your daily reports' : `You reported ${self} in daily reports`
 
   return (
     <div className="flex-1 space-y-6 p-4 md:p-8 pt-6">
@@ -48,6 +51,7 @@ export default async function BdeDashboardPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{meetingsBooked}</div>
+            <p className="text-xs text-muted-foreground mt-1">From CRM, Monday to today. {vsReported(meetingsBooked, reported.meetingsBooked)}</p>
           </CardContent>
         </Card>
         
@@ -58,6 +62,7 @@ export default async function BdeDashboardPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{prospectsContacted}</div>
+            <p className="text-xs text-muted-foreground mt-1">From CRM, Monday to today. {vsReported(prospectsContacted, reported.prospectsContacted)}</p>
           </CardContent>
         </Card>
 
@@ -68,6 +73,7 @@ export default async function BdeDashboardPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{qualified}</div>
+            <p className="text-xs text-muted-foreground mt-1">From CRM, Monday to today. {vsReported(qualified, reported.qualified)}</p>
           </CardContent>
         </Card>
       </div>
@@ -148,7 +154,7 @@ export default async function BdeDashboardPage() {
 
       <div className="mt-8 pt-6 border-t">
         <h3 className="text-xl font-semibold mb-4">Log Daily Activity</h3>
-        <BdeReportForm userId={session.user.id} />
+        <BdeReportForm crmToday={crmToday} />
       </div>
     </div>
   )

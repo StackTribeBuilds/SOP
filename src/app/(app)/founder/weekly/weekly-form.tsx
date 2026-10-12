@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import { toast } from "sonner"
+import { weekStart } from "@/lib/kpis"
 
 export function WeeklyForm({ userId }: { userId: string }) {
   const router = useRouter()
@@ -27,10 +28,7 @@ export function WeeklyForm({ userId }: { userId: string }) {
   const handleSave = async () => {
     setLoading(true)
     try {
-      const startOfWeek = new Date();
-      startOfWeek.setDate(startOfWeek.getDate() - startOfWeek.getDay() + 1); // Monday
-      
-      await saveFounderWeeklyReport(startOfWeek, form)
+      await saveFounderWeeklyReport(weekStart(), form)
       toast.success("Weekly report saved successfully")
       router.refresh()
     } catch (err) {
