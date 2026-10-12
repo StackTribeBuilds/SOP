@@ -6,6 +6,8 @@ import { format } from 'date-fns';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 import { LeadActivityFeed } from './lead-activity-feed';
+import { QualificationDialog } from './qualification-dialog';
+import { missingQualification } from '@/lib/gates';
 
 export default async function LeadDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = await params;
@@ -21,6 +23,8 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
   if (!lead) {
     notFound();
   }
+
+  const missing = missingQualification(lead);
 
   const activities = await prisma.activity.findMany({
     where: { entityType: 'Lead', entityId: leadId },
@@ -44,9 +48,20 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
           <Link href="/leads">
             <Button variant="outline">Back to Leads</Button>
           </Link>
-          {/* We can add an Edit button here later */}
+          <QualificationDialog lead={lead} missing={missing} />
         </div>
       </div>
+
+      {missing.length > 0 && !['WON', 'LOST'].includes(lead.stage) && (
+        <div className="rounded-lg border border-yellow-200 bg-yellow-50 px-4 py-3 text-sm text-yellow-800">
+          Not qualified yet. Add the {missing.join(', ')} before this lead can move to Qualified (Gate 2).
+        </div>
+      )}
+      {lead.stage === 'LOST' && lead.lostReason && (
+        <div className="rounded-lg border bg-muted/50 px-4 py-3 text-sm">
+          <span className="font-medium">Lost reason:</span> {lead.lostReason}
+        </div>
+      )}
 
       <div className="grid gap-6 md:grid-cols-2">
         <div className="space-y-6">

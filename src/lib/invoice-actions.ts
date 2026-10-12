@@ -1,9 +1,9 @@
 "use server"
 
 import { revalidatePath } from "next/cache"
-import { Prisma } from "@prisma/client"
 import { prisma } from "./prisma"
 import { requireFounder } from "./session"
+import { nextInvoiceNumber, withInvoiceNumberRetry } from "./invoice-number"
 
 type Result<T extends object = Record<never, never>> = ({ success: true } & T) | { success: false; error: string }
 
@@ -17,18 +17,6 @@ export async function getInvoiceById(id: string) {
       milestone: true,
     }
   });
-}
-
-// STMS-2026-001, STMS-2026-002, ... numbered per calendar year
-async function nextInvoiceNumber(tx: Prisma.TransactionClient) {
-  const prefix = `STMS-${new Date().getFullYear()}-`
-  const last = await tx.invoice.findFirst({
-    where: { invoiceNumber: { startsWith: prefix } },
-    orderBy: { invoiceNumber: "desc" },
-    select: { invoiceNumber: true },
-  })
-  const lastSeq = last ? parseInt(last.invoiceNumber.slice(prefix.length), 10) || 0 : 0
-  return `${prefix}${String(lastSeq + 1).padStart(3, "0")}`
 }
 
 function revalidateMoney(projectId?: string | null) {
@@ -67,30 +55,21 @@ export async function generateInvoiceFromMilestone(milestoneId: string): Promise
   // Default to 7 days from now for Due Date if not specified
   const dueDate = milestone.dueDate || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
-  // Retry once if another invoice took the same number in parallel
-  for (let attempt = 0; attempt < 2; attempt++) {
-    try {
-      const invoice = await prisma.$transaction(async (tx) => tx.invoice.create({
-        data: {
-          invoiceNumber: await nextInvoiceNumber(tx),
-          amount: milestone.paymentAmount,
-          dueDate: dueDate,
-          status: "DRAFT",
-          lineItems: lineItems,
-          clientId: milestone.project.clientId,
-          projectId: milestone.projectId,
-          milestoneId: milestone.id,
-          ownerId: milestone.project.projectOwnerId,
-        }
-      }))
-      revalidateMoney(milestone.projectId)
-      return { success: true, invoiceId: invoice.id }
-    } catch (e) {
-      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002" && attempt === 0) continue
-      throw e
+  const invoice = await withInvoiceNumberRetry(() => prisma.$transaction(async (tx) => tx.invoice.create({
+    data: {
+      invoiceNumber: await nextInvoiceNumber(tx),
+      amount: milestone.paymentAmount,
+      dueDate: dueDate,
+      status: "DRAFT",
+      lineItems: lineItems,
+      clientId: milestone.project.clientId,
+      projectId: milestone.projectId,
+      milestoneId: milestone.id,
+      ownerId: milestone.project.projectOwnerId,
     }
-  }
-  return { success: false, error: "Could not assign an invoice number. Try again." }
+  })))
+  revalidateMoney(milestone.projectId)
+  return { success: true, invoiceId: invoice.id }
 }
 
 // DRAFT -> SENT. From here the invoice counts as money owed (receivables, forecast, overdue).

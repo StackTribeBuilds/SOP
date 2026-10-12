@@ -143,6 +143,9 @@ function MilestoneCard({ milestone: m, projectId, clientName }: { milestone: Mil
   const router = useRouter()
   const [busy, setBusy] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
+  // Gate 7 block waiting for a founder exception
+  const [gateBlock, setGateBlock] = useState<{ status: MilestoneStatus; error: string } | null>(null)
+  const [exceptionReason, setExceptionReason] = useState('')
   const invoice = m.invoices[0]
   const done = m.status === 'COMPLETED' || m.status === 'APPROVED'
   const current = m.status === 'IN_PROGRESS' || m.status === 'CLIENT_REVIEW'
@@ -156,8 +159,44 @@ function MilestoneCard({ milestone: m, projectId, clientName }: { milestone: Mil
     router.refresh()
   }
 
+  const changeStatus = async (status: MilestoneStatus, reason?: string) => {
+    setBusy(true)
+    const res = await setMilestoneStatus(m.id, status, reason)
+    setBusy(false)
+    if (!res.success) {
+      if (res.canOverride) {
+        setExceptionReason('')
+        return setGateBlock({ status, error: res.error })
+      }
+      return toast.error(res.error)
+    }
+    setGateBlock(null)
+    toast.success('Status updated')
+    router.refresh()
+  }
+
   return (
     <div className="relative pl-8 md:pl-12">
+      <Dialog open={!!gateBlock} onOpenChange={(o) => { if (!o) setGateBlock(null) }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Start {m.name} early?</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm rounded-md border border-orange-200 bg-orange-50 p-3 text-orange-800">{gateBlock?.error}</p>
+          <div className="space-y-2">
+            <Label htmlFor={`gate7-${m.id}`}>Founder exception (logged)</Label>
+            <Textarea id={`gate7-${m.id}`} rows={2} value={exceptionReason} onChange={e => setExceptionReason(e.target.value)}
+              placeholder="e.g. Client paid by cheque, clearing on Monday" />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setGateBlock(null)}>Wait for payment</Button>
+            <Button variant="destructive" disabled={busy || !exceptionReason.trim()}
+              onClick={() => gateBlock && changeStatus(gateBlock.status, exceptionReason)}>
+              Start with exception
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       <div className="absolute -left-[11px] top-5 bg-background rounded-full">
         {done ? <CheckCircle2 className="w-5 h-5 text-primary" /> : current ? <Clock className="w-5 h-5 text-blue-500" /> : <Circle className="w-5 h-5 text-muted-foreground" />}
       </div>
@@ -174,7 +213,7 @@ function MilestoneCard({ milestone: m, projectId, clientName }: { milestone: Mil
               </CardDescription>
             </div>
             <div className="flex items-center gap-2 shrink-0">
-              <Select value={m.status} onValueChange={(v) => run(() => setMilestoneStatus(m.id, v as MilestoneStatus), 'Status updated')} disabled={busy}>
+              <Select value={m.status} onValueChange={(v) => changeStatus(v as MilestoneStatus)} disabled={busy}>
                 <SelectTrigger className="w-[170px] h-9"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {STATUSES.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}

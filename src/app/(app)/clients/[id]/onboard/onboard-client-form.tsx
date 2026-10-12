@@ -8,21 +8,12 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
+import { Progress } from "@/components/ui/progress";
+import { ONBOARDING_ITEMS } from "@/lib/gates";
 
-const CHECKLIST_ITEMS = [
-  { id: 'agreementSigned', label: 'Agreement Signed', desc: 'MSA & SOW have been signed by the client.' },
-  { id: 'advanceReceived', label: 'Advance Received', desc: 'Initial advance payment has been credited.' },
-  { id: 'clientInfoCollected', label: 'Client Info Collected', desc: 'GST, Address, and basic details are filled.' },
-  { id: 'primaryContactConfirmed', label: 'Primary Contact Confirmed', desc: 'Primary contact person is assigned.' },
-  { id: 'decisionMakerConfirmed', label: 'Decision Maker Confirmed', desc: 'Decision maker for the project is identified.' },
-  { id: 'commChannelEstablished', label: 'Comm Channel Established', desc: 'WhatsApp group or Slack channel is created.' },
-  { id: 'requirementsApproved', label: 'Requirements Approved', desc: 'Final requirements document is approved.' },
-  { id: 'assetsReceived', label: 'Assets Received', desc: 'Logos, branding, and required access received.' },
-  { id: 'timelineApproved', label: 'Timeline Approved', desc: 'Project timeline and delivery dates approved.' },
-  { id: 'milestonesEstablished', label: 'Milestones Established', desc: 'Payment milestones are set up in the system.' },
-  { id: 'responsibilitiesDocumented', label: 'Responsibilities Documented', desc: 'Client and agency responsibilities clarified.' },
-  { id: 'kickoffCompleted', label: 'Kickoff Completed', desc: 'Kickoff meeting has been conducted.' },
-] as const;
+// Bible §8.1: development starts only when all 12 are done
+const CHECKLIST_ITEMS = ONBOARDING_ITEMS;
 
 export function OnboardClientForm({ client }: { client: any }) {
   const router = useRouter();
@@ -40,16 +31,34 @@ export function OnboardClientForm({ client }: { client: any }) {
     setFormData(newData);
     
     startTransition(async () => {
-      await updateClientOnboarding(client.id, newData);
-      router.refresh();
+      try {
+        await updateClientOnboarding(client.id, { [id]: checked });
+        router.refresh();
+      } catch {
+        setFormData(formData);
+        toast.error("Could not save that item. Try again.");
+      }
     });
   };
+
+  const doneCount = CHECKLIST_ITEMS.filter(i => formData[i.id]).length;
+  const complete = doneCount === CHECKLIST_ITEMS.length;
 
   return (
     <Card>
       <CardHeader>
         <CardTitle>Onboarding Gate Checklist</CardTitle>
-        <CardDescription>Section 8 SOP - Complete all required steps to fully onboard the client.</CardDescription>
+        <CardDescription>
+          Bible §8.1. A client is onboarded only when all 12 items are done. Until then, the project can&apos;t start without a recorded founder exception (Gate 4).
+        </CardDescription>
+        <div className="pt-3 space-y-2">
+          <div className="flex justify-between text-sm">
+            <span className={complete ? "font-medium text-green-700" : "text-muted-foreground"}>
+              {complete ? "Fully onboarded. Development can start." : `${doneCount} of ${CHECKLIST_ITEMS.length} done`}
+            </span>
+          </div>
+          <Progress value={(doneCount / CHECKLIST_ITEMS.length) * 100} />
+        </div>
       </CardHeader>
       <CardContent className="space-y-6">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

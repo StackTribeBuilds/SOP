@@ -3,6 +3,7 @@
 import { prisma } from '@/lib/prisma';
 import { requireUser } from '@/lib/session';
 import { LeadStage } from '@prisma/client';
+import { checkLeadMove } from '@/lib/gates';
 
 /**
  * Fetches all leads, optionally filtered by stage.
@@ -59,12 +60,24 @@ export async function createLead(data: any) {
 /**
  * Updates the stage of a lead (e.g., for Kanban board).
  */
-export async function updateLeadStage(id: string, stage: string) {
-  await requireUser();
+export async function updateLeadStage(id: string, stage: string, lostReason?: string) {
+  const user = await requireUser();
   try {
     const lead = await prisma.$transaction(async (tx) => {
-      const current = await tx.lead.findUnique({ where: { id } });
-      if (!current) throw new Error('Lead not found');
+      const current = await tx.lead.findUnique({
+        where: { id },
+        include: { client: { include: { _count: { select: { projects: true } } } } },
+      });
+      if (!current) throw new GateError('Lead not found');
+
+      // Gates 1–3: allowed stage moves, qualification, founder-only wins
+      const blocked = checkLeadMove(
+        { ...current, clientProjectCount: current.client?._count.projects ?? 0 },
+        stage as LeadStage,
+        user.role,
+        lostReason,
+      );
+      if (blocked) throw new GateError(blocked);
 
       // Gate 3: a won lead becomes a client, so projects and invoices can be raised against it
       let clientId = current.clientId;
@@ -81,10 +94,24 @@ export async function updateLeadStage(id: string, stage: string) {
         clientId = client.id;
       }
 
-      return tx.lead.update({
+      const updated = await tx.lead.update({
         where: { id },
-        data: { stage: stage as LeadStage, clientId },
+        data: {
+          stage: stage as LeadStage,
+          clientId,
+          lostReason: stage === 'LOST' ? lostReason!.trim() : current.lostReason,
+        },
       });
+      await tx.activity.create({
+        data: {
+          entityType: 'Lead',
+          entityId: id,
+          action: 'Stage changed',
+          details: `${current.stage} → ${stage}${stage === 'LOST' ? `. Reason: ${lostReason!.trim()}` : ''}`,
+          userId: user.id,
+        },
+      });
+      return updated;
     });
 
     revalidatePath('/leads', 'layout');
@@ -92,36 +119,65 @@ export async function updateLeadStage(id: string, stage: string) {
     revalidatePath('/dashboard');
     return { success: true, data: lead };
   } catch (error: any) {
+    if (error instanceof GateError) return { success: false, error: error.message };
     console.error('Error updating lead stage:', error);
-    return { success: false, error: error.message };
+    return { success: false, error: 'Could not update the lead. Try again.' };
   }
 }
+
+class GateError extends Error {}
 
 /**
  * Updates the qualification fields of a lead.
  */
-export async function updateLeadQualification(id: string, data: any) {
-  await requireUser();
+export type LeadQualificationInput = {
+  estimatedBudget?: number | null;
+  timeline?: string;
+  decisionMaker?: string;
+  businessDescription?: string;
+  problemToSolve?: string;
+  whoWillUse?: string;
+  whyBuilding?: string;
+  projectType?: string;
+  existingSystem?: boolean | null;
+  integrationsNeeded?: string;
+  budgetConfirmed?: boolean;
+  paymentStructure?: string;
+  otherApprovers?: string;
+};
+
+// The Bible §4.1 qualification questions, including the three Gate 2 fields
+export async function updateLeadQualification(id: string, data: LeadQualificationInput) {
+  const user = await requireUser();
   try {
+    const clean = (v?: string) => (v?.trim() ? v.trim() : null);
     const lead = await prisma.lead.update({
       where: { id },
       data: {
-        businessDescription: data.businessDescription,
-        problemToSolve: data.problemToSolve,
-        whoWillUse: data.whoWillUse,
-        whyBuilding: data.whyBuilding,
-        projectType: data.projectType,
-        existingSystem: data.existingSystem,
-        integrationsNeeded: data.integrationsNeeded,
-        budgetConfirmed: data.budgetConfirmed,
-        paymentStructure: data.paymentStructure,
-        otherApprovers: data.otherApprovers,
+        estimatedBudget: data.estimatedBudget && data.estimatedBudget > 0 ? data.estimatedBudget : null,
+        timeline: clean(data.timeline),
+        decisionMaker: clean(data.decisionMaker),
+        businessDescription: clean(data.businessDescription),
+        problemToSolve: clean(data.problemToSolve),
+        whoWillUse: clean(data.whoWillUse),
+        whyBuilding: clean(data.whyBuilding),
+        projectType: clean(data.projectType),
+        existingSystem: data.existingSystem ?? null,
+        integrationsNeeded: clean(data.integrationsNeeded),
+        budgetConfirmed: !!data.budgetConfirmed,
+        paymentStructure: clean(data.paymentStructure),
+        otherApprovers: clean(data.otherApprovers),
       },
     });
+    await prisma.activity.create({
+      data: { entityType: 'Lead', entityId: id, action: 'Qualification updated', userId: user.id },
+    });
+    revalidatePath(`/leads/${id}`);
+    revalidatePath('/leads', 'layout');
     return { success: true, data: lead };
   } catch (error: any) {
     console.error('Error updating lead qualification:', error);
-    return { success: false, error: error.message };
+    return { success: false, error: 'Could not save the qualification details. Try again.' };
   }
 }
 

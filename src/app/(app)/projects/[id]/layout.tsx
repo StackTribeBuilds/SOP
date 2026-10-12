@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ArrowLeft, Settings } from "lucide-react";
-import { getProjectById } from "@/lib/project-actions";
+import { getProjectById, getProjectGates } from "@/lib/project-actions";
+import { ProjectStatusControl } from "./project-status-control";
 import { notFound } from "next/navigation";
 import { ProjectNav } from "./project-nav";
 import { Button } from "@/components/ui/button";
@@ -15,8 +16,8 @@ export default async function ProjectLayout({
   const resolvedParams = await params;
   const projectId = resolvedParams.id;
   
-  const project = await getProjectById(projectId);
-  if (!project) notFound();
+  const [project, gates] = await Promise.all([getProjectById(projectId), getProjectGates(projectId)]);
+  if (!project || !gates) notFound();
 
   return (
     <div className="space-y-6">
@@ -39,8 +40,11 @@ export default async function ProjectLayout({
               )}
             </div>
             <p className="text-muted-foreground mt-1">
-              Client: {project.client?.company} • Status: {project.status.replace('_', ' ')}
+              Client: {project.client?.company}
             </p>
+            <div className="mt-3">
+              <ProjectStatusControl projectId={projectId} gates={gates} />
+            </div>
           </div>
           <div className="flex gap-2">
             <Link href={`/projects/${projectId}/settings`}>
