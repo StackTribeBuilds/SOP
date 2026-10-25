@@ -45,7 +45,8 @@ export const PROJECT_HEALTH_LABEL: Record<string, string> = {
 export const LEAD_SEGMENT_LABEL: Record<LeadSegment, string> = {
   FOUNDER: 'Founders',
   MANUFACTURER: 'Manufacturers',
-  RESTAURANT: 'Restaurants',
+  RESTAURANT: 'Restaurants & hospitality',
+  D2C: 'D2C brands',
 }
 
 export const CONTENT_KIND_LABEL: Record<ContentKind, string> = {

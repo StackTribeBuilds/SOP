@@ -129,6 +129,7 @@ enum LeadSegment {
   FOUNDER
   MANUFACTURER
   RESTAURANT
+  D2C
 }
 
 enum ContentKind {
