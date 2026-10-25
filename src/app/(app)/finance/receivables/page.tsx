@@ -12,6 +12,7 @@ import {
 } from '@/components/ui/table'
 import { PageHeader, Stat, StatStrip } from '@/components/layout/page-header'
 import { SendInvoiceDialog, CancelInvoiceButton, LogPaymentDialog } from '@/components/finance/invoice-controls'
+import { EmailButton } from '@/components/email/email-button'
 
 export const metadata = { title: 'Receivables' };
 
@@ -72,6 +73,7 @@ export default async function ReceivablesPage() {
                       <TableCell>{new Date(d.dueDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' })}</TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-1">
+                          <EmailButton context={{ invoiceId: d.id }} kind="INVOICE" label="Email invoice" variant="default" />
                           <SendInvoiceDialog invoice={d} />
                           <CancelInvoiceButton invoice={d} />
                         </div>
@@ -139,7 +141,10 @@ export default async function ReceivablesPage() {
                     <p className="text-xs text-muted-foreground">{r.owner.name}</p>
                   </TableCell>
                   <TableCell className="text-right">
-                    <LogPaymentDialog invoice={r} />
+                    <div className="flex justify-end gap-1">
+                      <EmailButton context={{ invoiceId: r.id }} kind="PAYMENT_REMINDER" label="Remind" />
+                      <LogPaymentDialog invoice={r} />
+                    </div>
                   </TableCell>
                 </TableRow>
               ))

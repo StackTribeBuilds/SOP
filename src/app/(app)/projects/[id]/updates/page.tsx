@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
 import { Copy } from 'lucide-react';
+import { EmailButton } from '@/components/email/email-button';
 
 export default function UpdatesPage() {
   const params = useParams();
@@ -95,17 +96,20 @@ export default function UpdatesPage() {
     <div className="max-w-4xl space-y-6">
       <div className="flex justify-between items-center">
         <h1 className="text-[26px] font-semibold leading-tight tracking-[-0.02em]">Client update</h1>
-        <Button onClick={copyToClipboard} className="flex items-center gap-2">
-          <Copy className="h-4 w-4" />
-          Copy to Clipboard
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={copyToClipboard}>
+            <Copy className="h-4 w-4" />
+            Copy for WhatsApp
+          </Button>
+          <EmailButton context={{ projectId }} kind="PROJECT_UPDATE" label="Email update" variant="default" size="default" />
+        </div>
       </div>
 
       <Card>
         <CardHeader>
           <CardTitle>Generated Update</CardTitle>
           <CardDescription>
-            Edit this message as needed before copying to WhatsApp or Email.
+            Copy this for WhatsApp, or use Email update for a formatted email version (§10.2).
           </CardDescription>
         </CardHeader>
         <CardContent>

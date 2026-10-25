@@ -28,6 +28,7 @@ import { CheckCircle2, Circle, Clock, FileText, Pencil, Plus, Trash2 } from 'luc
 import { createMilestone, updateMilestone, setMilestoneStatus, deleteMilestone } from '@/lib/project-actions'
 import { generateInvoiceFromMilestone } from '@/lib/invoice-actions'
 import { SendInvoiceDialog, CancelInvoiceButton, LogPaymentDialog } from '@/components/finance/invoice-controls'
+import { EmailButton } from '@/components/email/email-button'
 import { formatCurrency } from '@/lib/utils'
 import type { MilestoneStatus } from '@prisma/client'
 
@@ -238,6 +239,9 @@ function MilestoneCard({ milestone: m, projectId, clientName }: { milestone: Mil
                   <span className="text-xs text-muted-foreground tabular-nums">{formatCurrency(invoice.paidAmount)} received</span>
                 )}
                 <span className="ml-auto flex flex-wrap gap-1">
+                  <EmailButton context={{ invoiceId: invoice.id }}
+                    kind={invoice.status === 'DRAFT' ? 'INVOICE' : invoice.status === 'PAID' ? 'PAYMENT_RECEIPT' : 'PAYMENT_REMINDER'}
+                    label={invoice.status === 'DRAFT' ? 'Email invoice' : invoice.status === 'PAID' ? 'Send receipt' : 'Remind'} />
                   {invoice.status === 'DRAFT' && <SendInvoiceDialog invoice={{ ...invoice, client: { company: clientName } }} />}
                   {['SENT', 'PARTIALLY_PAID', 'OVERDUE'].includes(invoice.status) && <LogPaymentDialog invoice={{ ...invoice, client: { company: clientName } }} />}
                   {invoice.status !== 'PAID' && <CancelInvoiceButton invoice={{ ...invoice, client: { company: clientName } }} />}
