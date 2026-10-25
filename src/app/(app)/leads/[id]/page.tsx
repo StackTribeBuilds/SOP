@@ -9,6 +9,7 @@ import { ArrowLeft } from 'lucide-react';
 import { PageHeader } from '@/components/layout/page-header';
 import { LEAD_STAGE_BADGE, LEAD_STAGE_LABEL } from '@/lib/labels';
 import { QualificationDialog } from './qualification-dialog';
+import { EmailButton } from '@/components/email/email-button';
 import { missingQualification } from '@/lib/gates';
 
 export const metadata = { title: 'Lead' };
@@ -50,7 +51,7 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
               <span>{lead.contactName} · owned by {lead.owner?.name ?? 'nobody'}</span>
             </span>
           }
-          actions={<QualificationDialog lead={lead} missing={missing} />}
+          actions={<><EmailButton context={{ leadId: lead.id }} /><QualificationDialog lead={lead} missing={missing} /></>}
         />
       </div>
 

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ArrowLeft, Settings } from "lucide-react";
 import { getProjectById, getProjectGates } from "@/lib/project-actions";
 import { ProjectStatusControl } from "./project-status-control";
+import { EmailButton } from "@/components/email/email-button";
 import { notFound } from "next/navigation";
 import { ProjectNav } from "./project-nav";
 import { Button } from "@/components/ui/button";
@@ -43,12 +44,15 @@ export default async function ProjectLayout({
               <ProjectStatusControl projectId={projectId} gates={gates} />
             </div>
           </div>
+          <div className="flex shrink-0 gap-2">
+          <EmailButton context={{ projectId }} label="Email client" />
           <Button variant="outline" size="sm" asChild>
             <Link href={`/projects/${projectId}/settings`}>
               <Settings className="h-4 w-4" />
               Edit details
             </Link>
           </Button>
+          </div>
         </div>
         
         <ProjectNav projectId={projectId} />

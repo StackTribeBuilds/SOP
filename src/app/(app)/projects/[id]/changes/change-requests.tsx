@@ -15,6 +15,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { formatCurrency } from '@/lib/utils';
 import { Plus } from 'lucide-react';
+import { EmailButton } from '@/components/email/email-button';
 
 type CR = {
   id: string;
@@ -138,6 +139,7 @@ function NextStep({ cr }: { cr: CR }) {
   return (
     <div className="flex justify-end flex-wrap gap-1">
       {(cr.status === 'REQUESTED' || cr.status === 'ESTIMATED') && <EstimateDialog cr={cr} />}
+      {cr.status === 'ESTIMATED' && <EmailButton context={{ changeRequestId: cr.id }} kind="CHANGE_REQUEST" label="Email for approval" />}
       {cr.status === 'ESTIMATED' && <ApproveDialog cr={cr} />}
       {(cr.status === 'REQUESTED' || cr.status === 'ESTIMATED') && (
         <Button size="sm" variant="ghost" disabled={busy} onClick={() => move('REJECTED', `${cr.crNumber} marked rejected`)}>Rejected</Button>

@@ -3,12 +3,13 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
-import { Banknote, ChevronDown, IndianRupee, Plus, Target, Wallet } from 'lucide-react'
+import { Banknote, ChevronDown, IndianRupee, Mail, Plus, Target, Wallet } from 'lucide-react'
 import { cn, formatCurrency } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { LeadForm } from '@/app/(app)/leads/lead-form'
 import { ExpenseForm } from '@/app/(app)/finance/expenses/expense-form'
 import { UpdateBalanceDialog } from '@/app/(app)/dashboard/quick-actions'
+import { EmailComposer } from '@/components/email/email-composer'
 
 export type MoneyBarData = {
   cash: number
@@ -109,7 +110,7 @@ export function MoneyBar({ data }: { data: MoneyBarData }) {
   )
 }
 
-type Dialog = 'lead' | 'expense' | 'balance' | null
+type Dialog = 'lead' | 'expense' | 'balance' | 'email' | null
 
 function QuickAdd() {
   const [dialog, setDialog] = useState<Dialog>(null)
@@ -137,6 +138,9 @@ function QuickAdd() {
             <DropdownMenu.Item className={item} onSelect={() => setDialog('expense')}>
               <Wallet className="h-4 w-4 text-muted-foreground" /> Expense
             </DropdownMenu.Item>
+            <DropdownMenu.Item className={item} onSelect={() => setDialog('email')}>
+              <Mail className="h-4 w-4 text-muted-foreground" /> Email
+            </DropdownMenu.Item>
             <DropdownMenu.Separator className="my-1 h-px bg-border" />
             <DropdownMenu.Item className={item} onSelect={() => setDialog('balance')}>
               <Banknote className="h-4 w-4 text-muted-foreground" /> Update bank balance
@@ -148,6 +152,7 @@ function QuickAdd() {
       <LeadForm hideTrigger open={dialog === 'lead'} onOpenChange={close} />
       <ExpenseForm hideTrigger open={dialog === 'expense'} onOpenChange={close} />
       <UpdateBalanceDialog hideTrigger open={dialog === 'balance'} onOpenChange={close} />
+      {dialog === 'email' && <EmailComposer context={{}} open onOpenChange={close} />}
     </>
   )
 }

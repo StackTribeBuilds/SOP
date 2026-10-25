@@ -6,6 +6,7 @@ import { PageHeader, Stat, StatStrip } from "@/components/layout/page-header";
 import { MoneyProgress } from "@/components/layout/money-progress";
 import { formatCurrency } from "@/lib/utils";
 import { NewClientDialog } from "./new-client-dialog";
+import { EmailButton } from "@/components/email/email-button";
 
 export const metadata = { title: "Clients" };
 
@@ -63,7 +64,9 @@ export default async function ClientsPage() {
                       : <span className="text-xs text-muted-foreground">No project yet</span>}
                   </TableCell>
                   <TableCell className="figure text-right font-medium">{c.activeProjects}</TableCell>
-                  <TableCell className="text-right">
+                  <TableCell className="text-right whitespace-nowrap">
+                    <EmailButton context={{ clientId: c.id }} kind={done ? "GENERAL" : "ONBOARDING_REQUEST"}
+                      label={done ? "Email client" : "Email what we need"} iconOnly variant="ghost" />
                     <Button asChild size="sm" variant={done ? "ghost" : "outline"}>
                       <Link href={`/clients/${c.id}/onboard`}>{done ? "View checklist" : "Continue onboarding"}</Link>
                     </Button>

@@ -7,7 +7,7 @@ import { usePathname } from 'next/navigation'
 import { signOut, useSession } from 'next-auth/react'
 import {
   BarChart3, BookOpen, Briefcase, CalendarCheck, CalendarDays, CalendarRange, Columns3, FileSpreadsheet,
-  FolderKanban, Gauge, Handshake, LineChart, LogOut, Menu, PiggyBank, Receipt, ScrollText, Sun, Target,
+  FolderKanban, Gauge, Handshake, LineChart, LogOut, Mail, Menu, PiggyBank, Receipt, ScrollText, Sun, Target,
   TrendingUp, Users, Wallet, X, type LucideIcon,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -32,6 +32,7 @@ const founderNav: NavGroup[] = [
     items: [
       { name: 'Clients', href: '/clients', icon: Handshake },
       { name: 'Projects', href: '/projects', icon: FolderKanban },
+      { name: 'Emails', href: '/emails', icon: Mail },
     ],
   },
   {
@@ -67,6 +68,7 @@ const businessNav: NavGroup[] = [
       { name: 'Leads', href: '/leads', icon: Target, match: ['/leads'] },
       { name: 'Lead board', href: '/leads/kanban', icon: Columns3 },
       { name: 'Pipeline', href: '/sales', icon: TrendingUp },
+      { name: 'Emails', href: '/emails', icon: Mail },
     ],
   },
   {
