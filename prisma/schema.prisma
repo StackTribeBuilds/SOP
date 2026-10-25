@@ -124,6 +124,30 @@ enum TaskStatus {
   DONE
 }
 
+// Which outbound play a lead belongs to
+enum LeadSegment {
+  FOUNDER
+  MANUFACTURER
+  RESTAURANT
+}
+
+enum ContentKind {
+  POST
+  EMAIL
+  DM
+  CONNECTION
+  PROFILE
+  PAGE
+}
+
+// Draft -> (changes requested -> draft) -> approved -> sent / live
+enum ContentStatus {
+  DRAFT
+  CHANGES
+  APPROVED
+  SENT
+}
+
 // ============================================
 // MODELS
 // ============================================
@@ -182,7 +206,14 @@ model Lead {
   otherApprovers       String?
   
   lostReason      String?
-  
+
+  // Outbound prospecting
+  segment         LeadSegment?
+  location        String?
+  website         String?
+  fitReason       String?    // the trigger: why this prospect, why now
+  externalKey     String?    @unique // stable id used by the growth import script
+
   ownerId         String
   owner           User       @relation("LeadOwner", fields: [ownerId], references: [id])
   
@@ -637,4 +668,49 @@ model CaseStudy {
   uploadedBy  String
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+}
+
+// Posts, outreach emails and page copy waiting for a founder's approval.
+// Nothing here is sent automatically: a founder approves it, sends it from
+// their own account, then marks it sent.
+model ContentItem {
+  id           String        @id @default(cuid())
+  key          String?       @unique // stable id used by the growth import script
+  kind         ContentKind
+  channel      String        // e.g. "LinkedIn · Nimesh", "Instagram", "Email · Aditya"
+  segment      LeadSegment?
+  status       ContentStatus @default(DRAFT)
+  title        String
+  target       String?       // who or where it's for
+  context      String?       // notes for the reviewer
+  body         String
+  scheduledFor DateTime?     // posts appear on the content calendar on this day
+  sortOrder    String?
+  feedback     String?       // the reviewer's note when changes are requested
+  reviewedAt   DateTime?
+  reviewedById String?
+  sentAt       DateTime?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  @@index([status])
+  @@index([scheduledFor])
+}
+
+// The growth to-do list: setup work and recurring jobs for founders, the BDE
+// team and Claude. Founders tick items off; everyone else sees them read-only.
+model GrowthTask {
+  id        String    @id @default(cuid())
+  key       String?   @unique // stable id used by the growth import script
+  title     String
+  details   String?
+  owner     String    // who does it: "Founders", "BDE", "Claude"
+  sortOrder Int       @default(0)
+  done      Boolean   @default(false)
+  doneAt    DateTime?
+  doneById  String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@index([done])
 }

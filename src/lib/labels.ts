@@ -1,6 +1,6 @@
 // Display names for enum values, so every screen uses the same words
 
-import type { LeadStage } from '@prisma/client'
+import type { ContentKind, ContentStatus, LeadSegment, LeadStage } from '@prisma/client'
 
 export const LEAD_STAGE_LABEL: Record<LeadStage, string> = {
   NEW: 'New',
@@ -40,6 +40,36 @@ export const PROJECT_HEALTH_LABEL: Record<string, string> = {
   AT_RISK: 'At risk',
   DELAYED: 'Delayed',
   BLOCKED: 'Blocked',
+}
+
+export const LEAD_SEGMENT_LABEL: Record<LeadSegment, string> = {
+  FOUNDER: 'Founders',
+  MANUFACTURER: 'Manufacturers',
+  RESTAURANT: 'Restaurants',
+}
+
+export const CONTENT_KIND_LABEL: Record<ContentKind, string> = {
+  POST: 'Post',
+  EMAIL: 'Email',
+  DM: 'DM',
+  CONNECTION: 'Connection note',
+  PROFILE: 'Profile copy',
+  PAGE: 'Page copy',
+}
+
+// What the reviewer needs to do next, in their words
+export const CONTENT_STATUS_LABEL: Record<ContentStatus, string> = {
+  DRAFT: 'Waiting for review',
+  CHANGES: 'Changes requested',
+  APPROVED: 'Approved · ready to send',
+  SENT: 'Sent / live',
+}
+
+export const CONTENT_STATUS_BADGE: Record<ContentStatus, 'warning' | 'danger' | 'default' | 'success'> = {
+  DRAFT: 'warning',
+  CHANGES: 'danger',
+  APPROVED: 'default',
+  SENT: 'success',
 }
 
 export function shortDate(d: Date | string | null | undefined) {

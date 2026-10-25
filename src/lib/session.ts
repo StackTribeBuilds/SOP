@@ -5,6 +5,10 @@ import { prisma } from './prisma'
 
 export const FOUNDER_ROLES: Role[] = ['FOUNDER', 'CEO', 'CTO', 'ADMIN']
 
+// Who can see the Grow pages. Only founders change anything there; the sales
+// team sees the same drafts, calendar and to-dos read-only.
+export const GROWTH_VIEW_ROLES: Role[] = [...FOUNDER_ROLES, 'BDE', 'BUSINESS_ANALYST']
+
 export class AuthError extends Error {
   constructor(message = 'Unauthorized') {
     super(message)
@@ -44,4 +48,14 @@ export async function requireFounder() {
 
 export function isFounderRole(role: Role) {
   return FOUNDER_ROLES.includes(role)
+}
+
+export async function requireGrowthViewer() {
+  const user = await requireUser()
+  if (!GROWTH_VIEW_ROLES.includes(user.role)) throw new AuthError('No access to Grow')
+  return user
+}
+
+export function canViewGrowth(role: Role) {
+  return GROWTH_VIEW_ROLES.includes(role)
 }

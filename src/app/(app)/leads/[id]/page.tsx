@@ -7,7 +7,7 @@ import Link from 'next/link';
 import { LeadActivityFeed } from './lead-activity-feed';
 import { ArrowLeft } from 'lucide-react';
 import { PageHeader } from '@/components/layout/page-header';
-import { LEAD_STAGE_BADGE, LEAD_STAGE_LABEL } from '@/lib/labels';
+import { LEAD_SEGMENT_LABEL, LEAD_STAGE_BADGE, LEAD_STAGE_LABEL } from '@/lib/labels';
 import { QualificationDialog } from './qualification-dialog';
 import { missingQualification } from '@/lib/gates';
 
@@ -67,6 +67,26 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
 
       <div className="grid gap-6 md:grid-cols-2">
         <div className="space-y-6">
+          {(lead.fitReason || lead.segment || lead.location || lead.website) && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Why this prospect</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3 text-sm">
+                {lead.fitReason && <p className="whitespace-pre-wrap">{lead.fitReason}</p>}
+                <div className="flex flex-wrap items-center gap-2 text-muted-foreground">
+                  {lead.segment && <Badge variant="outline">{LEAD_SEGMENT_LABEL[lead.segment]}</Badge>}
+                  {lead.location && <span>{lead.location}</span>}
+                  {lead.website && /^https?:\/\//i.test(lead.website) && (
+                    <a href={lead.website} target="_blank" rel="noopener noreferrer" className="break-all text-primary hover:underline">
+                      {lead.website.replace(/^https?:\/\/(www\.)?/, '')}
+                    </a>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           <Card>
             <CardHeader>
               <CardTitle>Contact Information</CardTitle>

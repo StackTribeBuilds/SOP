@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { PageHeader, Stat, StatStrip } from '@/components/layout/page-header';
-import { LEAD_STAGE_BADGE, LEAD_STAGE_LABEL, shortDate } from '@/lib/labels';
+import { LEAD_SEGMENT_LABEL, LEAD_STAGE_BADGE, LEAD_STAGE_LABEL, shortDate } from '@/lib/labels';
 import { PIPELINE_STAGES, STAGE_PROBABILITY } from '@/lib/kpis';
 import { cn, formatCurrency } from '@/lib/utils';
 import { Columns3 } from 'lucide-react';
@@ -105,6 +105,12 @@ export default async function LeadsPage({ searchParams }: { searchParams: Promis
                   <TableCell>
                     <Link href={`/leads/${lead.id}`} className="font-medium hover:text-primary">{lead.company}</Link>
                     <p className="text-xs text-muted-foreground">{lead.contactName}{lead.decisionMaker ? '' : ' · no decision maker yet'}</p>
+                    {(lead.segment || lead.location) && (
+                      <p className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+                        {lead.segment && <Badge variant="outline">{LEAD_SEGMENT_LABEL[lead.segment]}</Badge>}
+                        {lead.location}
+                      </p>
+                    )}
                   </TableCell>
                   <TableCell>
                     <Badge variant={LEAD_STAGE_BADGE[lead.stage]}>{LEAD_STAGE_LABEL[lead.stage]}</Badge>

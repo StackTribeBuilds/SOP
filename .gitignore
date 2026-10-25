@@ -39,3 +39,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Prospect and draft data for scripts/growth-import.ts (contains personal data, never commit)
+/growth-data/

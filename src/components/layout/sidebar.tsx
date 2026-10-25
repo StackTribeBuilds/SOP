@@ -6,8 +6,8 @@ import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import { signOut, useSession } from 'next-auth/react'
 import {
-  BarChart3, BookOpen, Briefcase, CalendarCheck, CalendarDays, CalendarRange, Columns3, FileSpreadsheet,
-  FolderKanban, Gauge, Handshake, LineChart, LogOut, Menu, PiggyBank, Receipt, ScrollText, Sun, Target,
+  BarChart3, BookOpen, Briefcase, CalendarCheck, CalendarClock, CalendarDays, CalendarRange, Columns3, FileSpreadsheet, Stamp,
+  FolderKanban, Gauge, Handshake, LineChart, ListChecks, LogOut, Menu, PiggyBank, Receipt, ScrollText, Sun, Target,
   TrendingUp, Users, Wallet, X, type LucideIcon,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -15,7 +15,7 @@ import { cn } from '@/lib/utils'
 type NavItem = { name: string; href: string; icon: LucideIcon; match?: string[] }
 type NavGroup = { label: string | null; items: NavItem[] }
 
-// Grouped in the order work flows through the business: sell, deliver, get paid, review
+// Grouped in the order work flows through the business: sell, grow, deliver, get paid, review
 const founderNav: NavGroup[] = [
   { label: null, items: [{ name: 'Today', href: '/dashboard', icon: Sun }] },
   {
@@ -25,6 +25,14 @@ const founderNav: NavGroup[] = [
       { name: 'Lead board', href: '/leads/kanban', icon: Columns3 },
       { name: 'Pipeline', href: '/sales', icon: TrendingUp },
       { name: 'BDE scorecard', href: '/bde', icon: Gauge, match: ['/bde'] },
+    ],
+  },
+  {
+    label: 'Grow',
+    items: [
+      { name: 'Approvals', href: '/growth/approvals', icon: Stamp },
+      { name: 'Content calendar', href: '/growth/calendar', icon: CalendarClock },
+      { name: 'Growth to-dos', href: '/growth/todos', icon: ListChecks },
     ],
   },
   {
@@ -67,6 +75,15 @@ const businessNav: NavGroup[] = [
       { name: 'Leads', href: '/leads', icon: Target, match: ['/leads'] },
       { name: 'Lead board', href: '/leads/kanban', icon: Columns3 },
       { name: 'Pipeline', href: '/sales', icon: TrendingUp },
+    ],
+  },
+  {
+    // View only for the sales team: founders approve and tick things off
+    label: 'Grow',
+    items: [
+      { name: 'Approvals', href: '/growth/approvals', icon: Stamp },
+      { name: 'Content calendar', href: '/growth/calendar', icon: CalendarClock },
+      { name: 'Growth to-dos', href: '/growth/todos', icon: ListChecks },
     ],
   },
   {
