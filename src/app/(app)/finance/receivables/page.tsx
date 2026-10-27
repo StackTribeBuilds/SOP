@@ -11,13 +11,13 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { PageHeader, Stat, StatStrip } from '@/components/layout/page-header'
-import { SendInvoiceDialog, CancelInvoiceButton, LogPaymentDialog } from '@/components/finance/invoice-controls'
+import { SendInvoiceDialog, CancelInvoiceButton, LogPaymentDialog, CreateMilestoneInvoiceButton, RecordMilestonePaymentDialog } from '@/components/finance/invoice-controls'
 import { EmailButton } from '@/components/email/email-button'
 
 export const metadata = { title: 'Receivables' };
 
 export default async function ReceivablesPage() {
-  const { receivables, agingSummary, drafts } = await getReceivablesData()
+  const { receivables, agingSummary, drafts, unbilled } = await getReceivablesData()
   const totalOutstanding = receivables.reduce((s, r) => s + r.outstanding, 0)
   const totalExpected = receivables.reduce((s, r) => s + r.expectedCash, 0)
 
@@ -38,6 +38,59 @@ export default async function ReceivablesPage() {
         <Stat label="60+ days late" value={formatCurrency(agingSummary['60+'])} tone={agingSummary['60+'] > 0 ? 'bad' : undefined}
           hint={overdueTotal > 0 ? `${Math.round((overdueTotal / Math.max(totalOutstanding, 1)) * 100)}% of receivables overdue` : undefined} />
       </StatStrip>
+
+      {/* Milestones earned or coming due with no invoice yet */}
+      {unbilled.length > 0 && (
+        <Card className="overflow-hidden border-warn/30">
+          <CardHeader className="pb-3">
+            <CardTitle>Milestones to bill</CardTitle>
+            <p className="text-sm text-muted-foreground">
+              {formatCurrency(unbilled.reduce((s, m) => s + m.paymentAmount, 0))} is finished or due within two weeks but not invoiced yet.
+              Invoice it, or record the payment if it has already arrived.
+            </p>
+          </CardHeader>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Client</TableHead>
+                <TableHead>Milestone</TableHead>
+                <TableHead className="text-right">Amount</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="text-right"><span className="sr-only">Actions</span></TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {unbilled.map(m => {
+                const finished = m.status === 'COMPLETED' || m.status === 'APPROVED'
+                return (
+                  <TableRow key={m.id}>
+                    <TableCell>
+                      <p className="font-medium">{m.project.client.company}</p>
+                      <p className="text-xs text-muted-foreground">{m.project.name}</p>
+                    </TableCell>
+                    <TableCell>{m.name}</TableCell>
+                    <TableCell className="figure text-right text-[15px] font-semibold whitespace-nowrap">{formatCurrency(m.paymentAmount)}</TableCell>
+                    <TableCell className="whitespace-nowrap">
+                      <Badge variant={finished ? 'warning' : 'secondary'}>{finished ? 'Done, not billed' : 'Coming due'}</Badge>
+                      {m.dueDate && (
+                        <p className="mt-0.5 text-xs text-muted-foreground">
+                          due {new Date(m.dueDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+                        </p>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex justify-end gap-1">
+                        <RecordMilestonePaymentDialog milestone={{ id: m.id, name: m.name }} clientName={m.project.client.company} outstanding={m.paymentAmount} />
+                        <CreateMilestoneInvoiceButton milestoneId={m.id} />
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                )
+              })}
+            </TableBody>
+          </Table>
+        </Card>
+      )}
 
       {/* Drafts: not owed until sent */}
       {drafts.length > 0 && (
@@ -74,7 +127,10 @@ export default async function ReceivablesPage() {
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-1">
                           <EmailButton context={{ invoiceId: d.id }} kind="INVOICE" label="Email invoice" variant="default" />
-                          <SendInvoiceDialog invoice={d} />
+                          {d.milestone && (
+                            <RecordMilestonePaymentDialog milestone={{ id: d.milestone.id, name: d.milestone.name }} clientName={d.client.company} outstanding={d.amount - d.paidAmount} />
+                          )}
+                          <SendInvoiceDialog invoice={d} secondary={!!d.milestone} />
                           <CancelInvoiceButton invoice={d} />
                         </div>
                       </TableCell>

@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache"
 import { prisma } from "./prisma"
 import { requireFounder } from "./session"
 import { nextInvoiceNumber, withInvoiceNumberRetry } from "./invoice-number"
+import { applyInvoicePayment, PaymentError, readPaymentInput } from "./payments"
 
 type Result<T extends object = Record<never, never>> = ({ success: true } & T) | { success: false; error: string }
 
@@ -99,4 +100,56 @@ export async function cancelInvoice(id: string): Promise<Result> {
   await prisma.invoice.update({ where: { id }, data: { status: "CANCELLED" } })
   revalidateMoney(invoice.projectId)
   return { success: true }
+}
+
+// One step for "the client paid this milestone": raises the invoice if there isn't one,
+// marks a draft as sent, and records the payment. Partial payments are fine; the rest
+// stays in receivables. Everything happens in one transaction.
+export async function recordMilestonePayment(
+  milestoneId: string,
+  data: { amount: number; date: string; method?: string; reference?: string; notes?: string },
+): Promise<Result<{ invoiceNumber: string; fullyPaid: boolean }>> {
+  await requireFounder()
+
+  try {
+    const payment = readPaymentInput(data)
+    const result = await withInvoiceNumberRetry(() => prisma.$transaction(async (tx) => {
+      const milestone = await tx.milestone.findUnique({
+        where: { id: milestoneId },
+        include: { project: true, invoices: { where: { status: { not: "CANCELLED" } }, orderBy: { createdAt: "desc" } } },
+      })
+      if (!milestone) throw new PaymentError("Milestone not found")
+
+      let invoice = milestone.invoices[0]
+      if (!invoice) {
+        if (!(milestone.paymentAmount > 0)) throw new PaymentError("Set a payment amount on the milestone first")
+        invoice = await tx.invoice.create({
+          data: {
+            invoiceNumber: await nextInvoiceNumber(tx),
+            amount: milestone.paymentAmount,
+            dueDate: milestone.dueDate ?? payment.date,
+            status: "SENT",
+            lineItems: [{ description: milestone.deliverables || milestone.name, qty: 1, cost: milestone.paymentAmount, subtotal: milestone.paymentAmount }],
+            clientId: milestone.project.clientId,
+            projectId: milestone.projectId,
+            milestoneId: milestone.id,
+            ownerId: milestone.project.projectOwnerId,
+          },
+        })
+      } else if (invoice.status === "DRAFT") {
+        // The client is paying it, so it has effectively been sent
+        invoice = await tx.invoice.update({ where: { id: invoice.id }, data: { status: "SENT" } })
+      }
+
+      await applyInvoicePayment(tx, invoice, payment)
+      const after = await tx.invoice.findUniqueOrThrow({ where: { id: invoice.id } })
+      return { invoiceNumber: after.invoiceNumber, fullyPaid: after.status === "PAID", projectId: milestone.projectId }
+    }))
+
+    revalidateMoney(result.projectId)
+    return { success: true, invoiceNumber: result.invoiceNumber, fullyPaid: result.fullyPaid }
+  } catch (e) {
+    if (e instanceof PaymentError) return { success: false, error: e.message }
+    throw e
+  }
 }

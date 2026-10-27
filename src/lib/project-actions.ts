@@ -10,7 +10,7 @@ import {
 } from './gates';
 import { nextInvoiceNumber, withInvoiceNumberRetry } from './invoice-number';
 
-type Result = { success: true } | { success: false; error: string; canOverride?: boolean };
+type Result = { success: true; invoiceCreated?: string } | { success: false; error: string; canOverride?: boolean };
 
 // Gate decisions and exceptions go in the activity log so there's a record of who allowed what
 async function logActivity(entityType: string, entityId: string, action: string, details: string, userId: string) {
@@ -325,17 +325,42 @@ export async function setMilestoneStatus(id: string, status: MilestoneStatus, ex
     }
   }
 
-  await prisma.milestone.update({
-    where: { id },
-    data: {
-      status,
-      completedDate: status === 'COMPLETED' || status === 'APPROVED' ? (milestone.completedDate ?? new Date()) : null,
-      clientApprovalDate: status === 'APPROVED' ? (milestone.clientApprovalDate ?? new Date()) : null,
-    },
-  });
+  const done = status === 'COMPLETED' || status === 'APPROVED';
+  const invoiceCreated = await withInvoiceNumberRetry(() => prisma.$transaction(async (tx) => {
+    await tx.milestone.update({
+      where: { id },
+      data: {
+        status,
+        completedDate: done ? (milestone.completedDate ?? new Date()) : null,
+        clientApprovalDate: status === 'APPROVED' ? (milestone.clientApprovalDate ?? new Date()) : null,
+      },
+    });
+
+    // A finished milestone is when its money falls due (§13): raise the draft invoice
+    // so it can't be forgotten. It counts as owed once it's sent.
+    if (!done || !(milestone.paymentAmount > 0)) return undefined;
+    const existing = await tx.invoice.count({ where: { milestoneId: id, status: { not: 'CANCELLED' } } });
+    if (existing) return undefined;
+    const invoice = await tx.invoice.create({
+      data: {
+        invoiceNumber: await nextInvoiceNumber(tx),
+        amount: milestone.paymentAmount,
+        dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        status: 'DRAFT',
+        lineItems: [{ description: milestone.deliverables || milestone.name, qty: 1, cost: milestone.paymentAmount, subtotal: milestone.paymentAmount }],
+        clientId: milestone.project.clientId,
+        projectId: milestone.projectId,
+        milestoneId: id,
+        ownerId: milestone.project.projectOwnerId,
+      },
+    });
+    return invoice.invoiceNumber;
+  }));
+
   revalidatePath(`/projects/${milestone.projectId}`, 'layout');
   revalidatePath('/dashboard');
-  return { success: true };
+  if (invoiceCreated) revalidatePath('/finance', 'layout');
+  return { success: true, invoiceCreated };
 }
 
 export async function deleteMilestone(id: string): Promise<Result> {

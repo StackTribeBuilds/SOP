@@ -4,8 +4,9 @@ import { prisma } from './prisma'
 import { requireFounder } from './session'
 import { revalidatePath } from 'next/cache'
 import { startOfWeek, startOfDay, addDays, subMonths, startOfMonth } from 'date-fns'
-import { formatCurrency, getCashZone, invoiceOutstanding, invoiceExpectedCash, isInvoiceOverdue, OPEN_INVOICE_STATUSES } from './utils'
+import { getCashZone, invoiceOutstanding, invoiceExpectedCash, isInvoiceOverdue, OPEN_INVOICE_STATUSES } from './utils'
 import { PIPELINE_STAGES, STAGE_PROBABILITY } from './kpis'
+import { applyInvoicePayment, PaymentError, readPaymentInput } from './payments'
 
 // ============================================
 // BANK BALANCE
@@ -43,54 +44,20 @@ export async function logPayment(data: {
 }): Promise<{ success: true } | { success: false; error: string }> {
   await requireFounder()
 
-  const amount = Math.round(data.amount * 100) / 100
-  if (!(amount > 0)) return { success: false, error: 'Enter an amount greater than zero' }
-  const date = new Date(data.date)
-  if (isNaN(date.getTime())) return { success: false, error: 'Enter a valid payment date' }
-
   try {
+    const payment = readPaymentInput(data)
     // Payment and invoice update succeed or fail together
     await prisma.$transaction(async (tx) => {
-      let clientId = data.clientId
-
       if (data.invoiceId) {
         const invoice = await tx.invoice.findUnique({ where: { id: data.invoiceId } })
         if (!invoice) throw new PaymentError('Invoice not found')
-        if (!(OPEN_INVOICE_STATUSES as readonly string[]).includes(invoice.status)) {
-          throw new PaymentError(invoice.status === 'DRAFT'
-            ? 'Send this invoice before logging a payment against it'
-            : `This invoice is ${invoice.status.toLowerCase()} and can't take payments`)
-        }
-        const outstanding = invoiceOutstanding(invoice)
-        if (amount > outstanding + 0.5) {
-          throw new PaymentError(`Amount is more than the ${formatCurrency(outstanding)} still owed on this invoice`)
-        }
-        clientId = invoice.clientId
-
-        const newPaidAmount = Math.min(invoice.amount, invoice.paidAmount + amount)
-        const fullyPaid = newPaidAmount >= invoice.amount - 0.5
-        await tx.invoice.update({
-          where: { id: invoice.id },
-          data: {
-            paidAmount: newPaidAmount,
-            status: fullyPaid ? 'PAID' : 'PARTIALLY_PAID',
-            paidDate: fullyPaid ? date : null,
-          },
-        })
+        await applyInvoicePayment(tx, invoice, payment)
+        return
       }
-
-      if (!clientId) throw new PaymentError('Choose a client or an invoice for this payment')
-
+      // Money not tied to an invoice (rare): record it against the client only
+      if (!data.clientId) throw new PaymentError('Choose a client or an invoice for this payment')
       await tx.payment.create({
-        data: {
-          amount,
-          clientId,
-          invoiceId: data.invoiceId || null,
-          date,
-          method: data.method,
-          reference: data.reference,
-          notes: data.notes,
-        },
+        data: { ...payment, clientId: data.clientId, invoiceId: null },
       })
     })
   } catch (e) {
@@ -103,8 +70,6 @@ export async function logPayment(data: {
   revalidatePath('/projects', 'layout')
   return { success: true }
 }
-
-class PaymentError extends Error {}
 
 // ============================================
 // EXPENSES
@@ -327,9 +292,12 @@ export async function getTodayData() {
     }),
     prisma.milestone.findMany({
       where: {
-        dueDate: { lte: in7Days },
-        status: { in: ['PENDING', 'IN_PROGRESS', 'CLIENT_REVIEW'] },
-        project: { status: 'IN_PROGRESS' },
+        // Due within a week, or already finished: either way the money needs billing
+        OR: [
+          { dueDate: { lte: in7Days }, status: { in: ['PENDING', 'IN_PROGRESS', 'CLIENT_REVIEW'] } },
+          { status: { in: ['COMPLETED', 'APPROVED'] } },
+        ],
+        project: { status: { in: ['IN_PROGRESS', 'ON_HOLD', 'COMPLETED'] } },
         invoices: { none: { status: { not: 'CANCELLED' } } },
         paymentAmount: { gt: 0 },
       },
@@ -394,10 +362,13 @@ export async function getTodayData() {
   }
 
   for (const m of milestones) {
+    const finished = m.status === 'COMPLETED' || m.status === 'APPROVED'
     items.push({
-      id: `ms-${m.id}`, group: 'Send', severity: m.dueDate && m.dueDate < now ? 2 : 1, date: m.dueDate,
+      id: `ms-${m.id}`, group: 'Send', severity: finished || (m.dueDate && m.dueDate < now) ? 2 : 1, date: m.dueDate,
       title: `Invoice ${m.name}`,
-      context: `${m.project.name} · due ${m.dueDate ? fmtDate(m.dueDate) : 'soon'} · invoice 7 days before (§13)`,
+      context: finished
+        ? `${m.project.name} · finished, not billed yet`
+        : `${m.project.name} · due ${m.dueDate ? fmtDate(m.dueDate) : 'soon'} · invoice 7 days before (§13)`,
       amount: m.paymentAmount, href: `/projects/${m.project.id}/milestones`, action: 'Create invoice',
     })
   }
@@ -469,6 +440,20 @@ export async function getReceivablesData() {
     }),
   ])
 
+  // Milestones that are finished, or due within two weeks, with no invoice yet:
+  // money earned or coming due that would otherwise be invisible here
+  const soon = addDays(new Date(), 14)
+  const unbilled = await prisma.milestone.findMany({
+    where: {
+      paymentAmount: { gt: 0 },
+      invoices: { none: { status: { not: 'CANCELLED' } } },
+      project: { status: { in: ['IN_PROGRESS', 'ON_HOLD', 'COMPLETED'] } },
+      OR: [{ status: { in: ['COMPLETED', 'APPROVED'] } }, { dueDate: { lte: soon } }],
+    },
+    include: { project: { include: { client: true } } },
+    orderBy: [{ dueDate: 'asc' }],
+  })
+
   const now = new Date()
   
   const receivables = invoices.map(invoice => {
@@ -500,7 +485,7 @@ export async function getReceivablesData() {
     '60+': receivables.filter(r => r.agingBucket === '60+ days').reduce((s, r) => s + r.outstanding, 0),
   }
 
-  return { receivables, agingSummary, drafts }
+  return { receivables, agingSummary, drafts, unbilled }
 }
 
 // ============================================

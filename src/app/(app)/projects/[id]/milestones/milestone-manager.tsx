@@ -27,7 +27,7 @@ import {
 import { CheckCircle2, Circle, Clock, FileText, Pencil, Plus, Trash2 } from 'lucide-react'
 import { createMilestone, updateMilestone, setMilestoneStatus, deleteMilestone } from '@/lib/project-actions'
 import { generateInvoiceFromMilestone } from '@/lib/invoice-actions'
-import { SendInvoiceDialog, CancelInvoiceButton, LogPaymentDialog } from '@/components/finance/invoice-controls'
+import { SendInvoiceDialog, CancelInvoiceButton, RecordMilestonePaymentDialog } from '@/components/finance/invoice-controls'
 import { EmailButton } from '@/components/email/email-button'
 import { formatCurrency } from '@/lib/utils'
 import type { MilestoneStatus } from '@prisma/client'
@@ -172,7 +172,11 @@ function MilestoneCard({ milestone: m, projectId, clientName }: { milestone: Mil
       return toast.error(res.error)
     }
     setGateBlock(null)
-    toast.success('Status updated')
+    if (res.invoiceCreated) {
+      toast.success(`Milestone done. Draft invoice ${res.invoiceCreated} is ready: email it, or record the payment when it arrives.`)
+    } else {
+      toast.success('Status updated')
+    }
     router.refresh()
   }
 
@@ -242,8 +246,11 @@ function MilestoneCard({ milestone: m, projectId, clientName }: { milestone: Mil
                   <EmailButton context={{ invoiceId: invoice.id }}
                     kind={invoice.status === 'DRAFT' ? 'INVOICE' : invoice.status === 'PAID' ? 'PAYMENT_RECEIPT' : 'PAYMENT_REMINDER'}
                     label={invoice.status === 'DRAFT' ? 'Email invoice' : invoice.status === 'PAID' ? 'Send receipt' : 'Remind'} />
-                  {invoice.status === 'DRAFT' && <SendInvoiceDialog invoice={{ ...invoice, client: { company: clientName } }} />}
-                  {['SENT', 'PARTIALLY_PAID', 'OVERDUE'].includes(invoice.status) && <LogPaymentDialog invoice={{ ...invoice, client: { company: clientName } }} />}
+                  {invoice.status !== 'PAID' && (
+                    <RecordMilestonePaymentDialog milestone={{ id: m.id, name: m.name }} clientName={clientName}
+                      outstanding={Math.max(0, invoice.amount - invoice.paidAmount)} primary />
+                  )}
+                  {invoice.status === 'DRAFT' && <SendInvoiceDialog secondary invoice={{ ...invoice, client: { company: clientName } }} />}
                   {invoice.status !== 'PAID' && <CancelInvoiceButton invoice={{ ...invoice, client: { company: clientName } }} />}
                 </span>
               </>
@@ -251,6 +258,9 @@ function MilestoneCard({ milestone: m, projectId, clientName }: { milestone: Mil
               <>
                 <span className="text-sm text-muted-foreground">Not invoiced</span>
                 <span className="ml-auto flex flex-wrap gap-1">
+                  {m.paymentAmount > 0 && (
+                    <RecordMilestonePaymentDialog milestone={{ id: m.id, name: m.name }} clientName={clientName} outstanding={m.paymentAmount} />
+                  )}
                   <Button size="sm" variant="outline" disabled={busy || !(m.paymentAmount > 0)}
                     onClick={() => run(() => generateInvoiceFromMilestone(m.id), 'Draft invoice created')}>
                     <FileText className="h-3.5 w-3.5 mr-1.5" /> Create invoice
