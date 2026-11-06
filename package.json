@@ -12,7 +12,8 @@
     "db:seed": "npx ts-node --compiler-options '{\"module\":\"CommonJS\"}' prisma/seed.ts",
     "db:reset": "npx prisma db push --force-reset && npm run db:seed",
     "growth:export": "npx ts-node --compiler-options '{\"module\":\"CommonJS\"}' scripts/growth-export.ts",
-    "growth:import":"npx ts-node --compiler-options '{\"module\":\"CommonJS\"}' scripts/growth-import.ts"
+    "growth:import":"npx ts-node --compiler-options '{\"module\":\"CommonJS\"}' scripts/growth-import.ts",
+    "growth:disqualify": "npx ts-node --compiler-options '{\"module\":\"CommonJS\"}' scripts/growth-disqualify.ts"
   },
   "prisma": {
     "seed": "ts-node --compiler-options {\"module\":\"CommonJS\"} prisma/seed.ts"
